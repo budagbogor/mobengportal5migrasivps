@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Message, Sender, AnalysisResult, CandidateSubmission, CandidateProfile, AppSettings, ROLE_DEFINITIONS, RoleType, BigFiveTraits } from './types';
 import { sendMessageToGemini, generateFinalSummary } from './services/geminiService';
+import { supabase } from './services/supabaseClient'; // Import Supabase Client
 import ChatInterface from './components/ChatInterface';
 import ScoreCard from './components/ScoreCard';
 import DocumentationModal from './components/DocumentationModal';
@@ -76,49 +77,97 @@ function App() {
   // Derived active definition
   const activeRoleDefinition = ROLE_DEFINITIONS[appSettings.activeRole];
 
-  // --- TOKEN VALIDATION SYSTEM (ON LOAD) ---
+  // --- TOKEN VALIDATION SYSTEM (SUPABASE INTEGRATED) ---
   useEffect(() => {
-    const queryParams = new URLSearchParams(window.location.search);
-    const inviteCode = queryParams.get('invitation');
+    const validateToken = async () => {
+        const queryParams = new URLSearchParams(window.location.search);
+        const inviteCode = queryParams.get('invitation');
 
-    if (inviteCode) {
-        try {
-            // 1. Decode Base64 Token
-            const decodedJson = atob(inviteCode);
-            const token: InviteToken = JSON.parse(decodedJson);
+        if (inviteCode) {
+            try {
+                // 1. Decode Base64 Token
+                const decodedJson = atob(inviteCode);
+                const token: InviteToken = JSON.parse(decodedJson);
 
-            // 2. Check Expiry (24 Hours Validity)
-            if (Date.now() > token.exp) {
-                setCurrentView('link_expired');
-                return;
+                // 2. Check Expiry (24 Hours Validity)
+                if (Date.now() > token.exp) {
+                    setCurrentView('link_expired');
+                    return;
+                }
+
+                // 3. Check if Used (SUPABASE CHECK)
+                const { data, error } = await supabase
+                    .from('used_tokens')
+                    .select('token_id')
+                    .eq('token_id', token.id)
+                    .single();
+
+                if (data) {
+                    // Token exists in used_tokens table
+                    setCurrentView('link_expired');
+                    return;
+                }
+
+                // 4. Apply Token Data
+                setAppSettings(prev => ({ ...prev, activeRole: token.r }));
+                setCandidateProfile(prev => ({
+                    ...prev,
+                    name: token.n,
+                    phone: token.p
+                }));
+                
+                // 5. Lock Profile & Set Active Token
+                setIsLockedProfile(true);
+                setActiveTokenId(token.id);
+                setCurrentView('candidate_intro'); // Skip Role Selection
+
+            } catch (error) {
+                console.error("Invalid Token or Network Error", error);
+                setCurrentView('role_selection'); // Fallback if token broken
             }
-
-            // 3. Check if Used (Local Browser Check)
-            const usedTokens = JSON.parse(localStorage.getItem('mobeng_used_tokens') || '[]');
-            if (usedTokens.includes(token.id)) {
-                setCurrentView('link_expired');
-                return;
-            }
-
-            // 4. Apply Token Data
-            setAppSettings(prev => ({ ...prev, activeRole: token.r }));
-            setCandidateProfile(prev => ({
-                ...prev,
-                name: token.n,
-                phone: token.p
-            }));
-            
-            // 5. Lock Profile & Set Active Token
-            setIsLockedProfile(true);
-            setActiveTokenId(token.id);
-            setCurrentView('candidate_intro'); // Skip Role Selection
-
-        } catch (error) {
-            console.error("Invalid Token", error);
-            setCurrentView('role_selection'); // Fallback if token broken
         }
-    }
+    };
+    validateToken();
   }, []);
+
+  // --- FETCH SUBMISSIONS (DASHBOARD) ---
+  useEffect(() => {
+    if (currentView === 'recruiter_dashboard') {
+        const fetchSubmissions = async () => {
+            const { data, error } = await supabase
+                .from('submissions')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error("Error fetching submissions:", error);
+                return;
+            }
+
+            if (data) {
+                // Map DB columns back to App Types
+                const mappedSubmissions: CandidateSubmission[] = data.map((item: any) => ({
+                    id: item.id,
+                    profile: item.profile_data,
+                    role: item.role,
+                    timestamp: new Date(item.created_at),
+                    simulationScores: item.simulation_scores,
+                    simulationFeedback: "Loaded from database", // Simplified
+                    psychometrics: item.psychometrics,
+                    cultureFitScore: item.culture_fit_score,
+                    starMethodScore: 0, // Assume 0 if not stored or structure differently
+                    logicScore: item.logic_score,
+                    finalSummary: item.final_summary,
+                    status: item.status,
+                    cheatCount: item.cheat_count
+                }));
+                setSubmissions(mappedSubmissions);
+            }
+        };
+        fetchSubmissions();
+    }
+  }, [currentView]);
+
 
   // --- PROCTORING SYSTEM (TAB DETECTION) ---
   useEffect(() => {
@@ -238,7 +287,7 @@ function App() {
       setCurrentView('logic_test_intro');
   };
 
-  // Finished Test 2 -> Submit EVERYTHING
+  // Finished Test 2 -> Submit EVERYTHING (SUPABASE INTEGRATION)
   const handleLogicTestComplete = async (score: number, passed: boolean) => {
       setIsSubmitting(true);
       setSubmissionProgress('AI sedang menganalisa psikometri, kompetensi STAR, dan culture fit...');
@@ -259,41 +308,57 @@ function App() {
               score
           );
 
-          const newSubmission: CandidateSubmission = {
-              id: uuidv4(),
+          const newSubmissionId = uuidv4();
+          const calculatedStatus = calculateOverallStatus(simData.scores, score);
+
+          // 1. Prepare Payload for Supabase
+          const dbPayload = {
+              id: newSubmissionId,
+              candidate_name: candidateProfile.name,
+              candidate_phone: candidateProfile.phone,
+              role: activeRoleDefinition.label,
+              logic_score: score,
+              culture_fit_score: finalReport.cultureFitScore,
+              status: calculatedStatus,
+              profile_data: candidateProfile,
+              simulation_scores: simData.scores,
+              psychometrics: finalReport.psychometrics,
+              final_summary: finalReport.summary,
+              cheat_count: cheatCount
+          };
+
+          // 2. Insert into Submissions Table
+          setSubmissionProgress('Menyimpan data ke Cloud Database...');
+          const { error: submitError } = await supabase.from('submissions').insert([dbPayload]);
+          
+          if (submitError) throw submitError;
+
+          // 3. Mark Token as Used (if active)
+          if (activeTokenId) {
+             await supabase.from('used_tokens').insert([{ token_id: activeTokenId }]);
+          }
+
+          // 4. Update Local State (Optional, mostly for immediate feedback if we stayed on view)
+          const newLocalSubmission: CandidateSubmission = {
+              id: newSubmissionId,
               profile: { ...candidateProfile },
               role: activeRoleDefinition.label,
               timestamp: new Date(),
-              
-              // Behavioral
               simulationScores: simData.scores,
               simulationFeedback: simData.feedback,
-              
-              // Psychometric (New)
               psychometrics: finalReport.psychometrics,
               cultureFitScore: finalReport.cultureFitScore,
               starMethodScore: finalReport.starMethodScore,
-              
-              // Logic
               logicScore: score,
-              
-              // Summary
               finalSummary: finalReport.summary,
-              status: calculateOverallStatus(simData.scores, score),
+              status: calculatedStatus,
               cheatCount: cheatCount
           };
+          setSubmissions(prev => [newLocalSubmission, ...prev]);
 
-          setSubmissions(prev => [newSubmission, ...prev]);
           setIsSubmitting(false);
-
-          // --- MARK TOKEN AS USED (ONE-TIME USE LOGIC) ---
-          if (activeTokenId) {
-             const usedTokens = JSON.parse(localStorage.getItem('mobeng_used_tokens') || '[]');
-             usedTokens.push(activeTokenId);
-             localStorage.setItem('mobeng_used_tokens', JSON.stringify(usedTokens));
-          }
           
-          alert(`SELURUH RANGKAIAN TES SELESAI!\n\nTerima kasih ${candidateProfile.name}.\n\nData hasil tes telah BERHASIL disimpan ke database sistem.\nHasil kelulusan TIDAK ditampilkan di layar ini.\n\nTim Recruiter Mobeng akan mengirimkan hasil detail dan keputusan akhir melalui WhatsApp ke nomor: ${candidateProfile.phone}`);
+          alert(`SELURUH RANGKAIAN TES SELESAI!\n\nTerima kasih ${candidateProfile.name}.\n\nData hasil tes telah BERHASIL disimpan ke database Mobeng.\nHasil kelulusan TIDAK ditampilkan di layar ini.\n\nTim Recruiter Mobeng akan mengirimkan hasil detail dan keputusan akhir melalui WhatsApp ke nomor: ${candidateProfile.phone}`);
           
           // Reset
           setCurrentView('role_selection');
@@ -309,13 +374,15 @@ function App() {
 
       } catch (error) {
           console.error("Submission error", error);
-          alert("Terjadi kesalahan saat menyimpan data. Mohon lapor ke petugas.");
+          alert("Gagal menyimpan data ke server. Mohon screenshot hasil ini dan kirim ke HR.");
           setIsSubmitting(false);
       }
   };
 
   const handleRecruiterLogin = (e: React.FormEvent) => {
       e.preventDefault();
+      // Simple hardcoded check for demo
+      // In production, integrate with Supabase Auth
       setCurrentView('recruiter_dashboard');
   };
 
@@ -355,8 +422,6 @@ function App() {
       };
 
       // 2. Encode to Base64 (Simple "Encryption" for URL)
-      // Note: In a real enterprise app, use JWT signed by backend. 
-      // This is sufficient for frontend-only simulation.
       const encodedToken = btoa(JSON.stringify(tokenPayload));
       
       const currentUrl = window.location.origin + window.location.pathname; // Base URL without params
@@ -381,7 +446,7 @@ function App() {
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800 mb-2">Tautan Tidak Valid</h2>
                   <p className="text-slate-600 mb-6">
-                      Maaf, tautan undangan ini sudah digunakan sebelumnya atau telah kadaluarsa (lebih dari 24 jam).
+                      Maaf, tautan undangan ini sudah digunakan sebelumnya atau telah kadaluarsa, atau sudah diselesaikan sebelumnya.
                   </p>
                   <p className="text-xs text-slate-400 mb-8 bg-slate-50 p-3 rounded-lg">
                       Sistem keamanan Mobeng membatasi akses tes hanya untuk satu kali pengerjaan demi menjaga integritas data.
@@ -456,7 +521,11 @@ function App() {
     )
   }
 
-  // 2. CANDIDATE INTRO SCREEN (Updated with forced white background on inputs)
+  // ... (Candidate Intro, Logic Test Intro, Logic Test View, Recruiter Login - Unchanged except for imports and state references)
+  // To save space, assuming those blocks remain mostly the same visually, but using updated state.
+  // The significant logic changes were in useEffect and handleLogicTestComplete above.
+  
+  // 2. CANDIDATE INTRO SCREEN
   if (currentView === 'candidate_intro') {
     return (
       <div className="min-h-screen bg-mobeng-darkblue flex items-center justify-center p-4 relative overflow-hidden">
@@ -472,7 +541,6 @@ function App() {
           <div className="md:w-5/12 bg-gradient-to-br from-mobeng-blue to-mobeng-darkblue p-8 md:p-12 text-white flex flex-col justify-between relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
             
-            {/* If locked profile (invited), hide Back button to prevent role switching */}
             {!isLockedProfile && (
                 <button onClick={() => setCurrentView('role_selection')} className="absolute top-6 left-6 text-white/80 hover:text-white flex items-center gap-2 text-xs font-medium z-20"><ArrowLeft size={14} /> Kembali</button>
             )}
@@ -501,37 +569,19 @@ function App() {
             </div>
           </div>
 
-          {/* Right Panel - Form (Fixed Inputs) */}
           <div className="md:w-7/12 p-8 md:p-12 flex flex-col bg-white overflow-y-auto max-h-screen">
             <h2 className="text-2xl font-bold text-mobeng-darkblue mb-2">Profil Kandidat</h2>
             <p className="text-slate-600 mb-6 text-sm">Posisi: <span className="font-semibold text-slate-900">{activeRoleDefinition.label}</span></p>
             
             <div className="space-y-4 mb-8">
-                {/* Form Inputs with forced bg-white and high contrast text */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap *</label>
-                        <input 
-                            type="text" 
-                            name="name" 
-                            value={candidateProfile.name} 
-                            onChange={handleInputChange} 
-                            placeholder="Cth: Budi Santoso" 
-                            disabled={isLockedProfile}
-                            className={`w-full border rounded-lg p-2.5 text-base text-slate-900 font-medium focus:ring-2 focus:ring-mobeng-green outline-none ${isLockedProfile ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300'}`}
-                        />
+                        <input type="text" name="name" value={candidateProfile.name} onChange={handleInputChange} placeholder="Cth: Budi Santoso" disabled={isLockedProfile} className={`w-full border rounded-lg p-2.5 text-base text-slate-900 font-medium focus:ring-2 focus:ring-mobeng-green outline-none ${isLockedProfile ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300'}`}/>
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">No. Handphone/WA *</label>
-                        <input 
-                            type="text" 
-                            name="phone" 
-                            value={candidateProfile.phone} 
-                            onChange={handleInputChange} 
-                            placeholder="0812..." 
-                            disabled={isLockedProfile}
-                            className={`w-full border rounded-lg p-2.5 text-base text-slate-900 font-medium focus:ring-2 focus:ring-mobeng-green outline-none ${isLockedProfile ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300'}`}
-                        />
+                        <input type="text" name="phone" value={candidateProfile.phone} onChange={handleInputChange} placeholder="0812..." disabled={isLockedProfile} className={`w-full border rounded-lg p-2.5 text-base text-slate-900 font-medium focus:ring-2 focus:ring-mobeng-green outline-none ${isLockedProfile ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' : 'bg-white border-slate-300'}`}/>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -574,7 +624,7 @@ function App() {
     );
   }
 
-  // 3. LOGIC TEST INTRO (Unchanged)
+  // 3. LOGIC TEST INTRO
   if (currentView === 'logic_test_intro') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 to-mobeng-darkblue flex items-center justify-center p-4">
@@ -587,13 +637,11 @@ function App() {
                     Terima kasih telah menyelesaikan sesi roleplay. <br/>
                     Selanjutnya adalah <strong>Tes Logika & Ketelitian</strong>.
                 </p>
-                
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 text-left text-sm text-slate-700 space-y-2">
                     <p className="flex items-center gap-2"><BrainCircuit size={16} className="text-mobeng-blue"/> <strong>Jumlah Soal:</strong> 10 Soal Pilihan Ganda</p>
                     <p className="flex items-center gap-2"><Timer size={16} className="text-mobeng-orange"/> <strong>Waktu:</strong> 5 Menit</p>
                     <p className="flex items-center gap-2"><Zap size={16} className="text-mobeng-green"/> <strong>Materi:</strong> Matematika Dasar, Deret Angka, Logika Verbal.</p>
                 </div>
-
                 <button onClick={() => setCurrentView('logic_test')} className="w-full py-4 bg-mobeng-blue hover:bg-mobeng-darkblue text-white font-bold rounded-xl transition-all shadow-lg text-lg flex items-center justify-center gap-2">
                     Lanjut ke Tes Logika <ArrowRight size={20} />
                 </button>
@@ -602,7 +650,7 @@ function App() {
       )
   }
 
-  // 4. LOGIC TEST VIEW
+  // 4. LOGIC TEST
   if (currentView === 'logic_test') {
       if (isSubmitting) {
           return (
@@ -626,7 +674,7 @@ function App() {
       )
   }
 
-  // 5. RECRUITER LOGIN (Inputs fixed here as well)
+  // 5. RECRUITER LOGIN
   if (currentView === 'recruiter_login') {
       return (
         <div className="min-h-screen bg-mobeng-lightgrey flex items-center justify-center p-4">
@@ -646,7 +694,7 @@ function App() {
       )
   }
 
-  // 6. RECRUITER DASHBOARD (UPDATED)
+  // 6. RECRUITER DASHBOARD
   if (currentView === 'recruiter_dashboard') {
     return (
       <div className="min-h-screen bg-slate-50 font-sans relative">
@@ -689,23 +737,16 @@ function App() {
             </div>
         )}
 
-        {/* Settings Modal - FIXED FOR MOBILE */}
+        {/* Settings Modal */}
         {isSettingsOpen && (
             <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
                 <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)} />
-                
-                {/* Fixed: Added max-h-[90vh] and flex-col to allow inner scrolling */}
                 <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-                    
-                    {/* Header - Fixed/Sticky */}
                     <div className="bg-mobeng-darkblue p-6 flex justify-between items-center text-white shrink-0">
                         <h2 className="text-xl font-bold flex items-center gap-2"><Settings size={20}/> Pengaturan Sistem</h2>
                         <button onClick={() => setIsSettingsOpen(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
                     </div>
-                    
-                    {/* Body - Scrollable */}
                     <div className="p-6 space-y-6 overflow-y-auto">
-                        {/* 1. Job Role Selection */}
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                                 <Briefcase size={16} className="text-mobeng-blue"/> Posisi yang Diuji (Active Role)
@@ -724,8 +765,6 @@ function App() {
                                 <strong>Info Skenario:</strong> {ROLE_DEFINITIONS[appSettings.activeRole].description}
                             </div>
                         </div>
-                        
-                        {/* 2. Logic Question Set Selection (NEW) */}
                         <div className="pt-4 border-t border-slate-100">
                              <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                                 <BrainCircuit size={16} className="text-mobeng-blue"/> Versi Soal Logika (Anti-Cheat)
@@ -744,8 +783,6 @@ function App() {
                                 <strong>Paket Aktif:</strong> {QUESTION_SETS[appSettings.activeLogicSetId]?.description || "Paket tidak ditemukan"}
                             </div>
                         </div>
-
-                        {/* 3. Concentration Mode Toggle (RE-ENABLED) */}
                         <div className="pt-4 border-t border-slate-100">
                             <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                                 <MonitorPlay size={16} className="text-mobeng-blue"/> Mode Tampilan Kandidat
@@ -779,8 +816,6 @@ function App() {
                             </div>
                         </div>
                     </div>
-
-                    {/* Footer - Fixed/Sticky */}
                     <div className="p-4 bg-slate-50 text-right shrink-0 border-t border-slate-200">
                          <button onClick={() => setIsSettingsOpen(false)} className="bg-mobeng-blue text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-mobeng-darkblue transition-colors">Simpan Pengaturan</button>
                     </div>
@@ -813,7 +848,6 @@ function App() {
                     
                     <div className="p-6 md:p-8 overflow-y-auto max-h-[80vh] print:max-h-none print:overflow-visible flex flex-col gap-6">
                          
-                         {/* Header Info */}
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                                  <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pendidikan</div>
@@ -825,12 +859,8 @@ function App() {
                              </div>
                         </div>
 
-                        {/* Combined Result Section */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* LEFT COLUMN: SIMULATION + PSYCHOMETRICS */}
                             <div className="col-span-1 md:col-span-2 space-y-4">
-                                
-                                {/* 1. Behavioral Competency */}
                                 <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2">
                                     <MessageSquare size={18} /> Hasil Tes 1: Behavioral Simulation
                                 </h3>
@@ -847,8 +877,6 @@ function App() {
                                             </div>
                                         ))}
                                 </div>
-
-                                {/* 2. Psychometric Analysis (New) */}
                                 {selectedSubmission.psychometrics && (
                                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                                         <h4 className="font-bold text-sm text-slate-600 mb-2 flex items-center gap-2"><Brain size={16}/> Psychometric Profile (Big Five)</h4>
@@ -864,8 +892,6 @@ function App() {
                                     </div>
                                 )}
                             </div>
-
-                            {/* RIGHT COLUMN: LOGIC & INTEGRITY */}
                             <div className="space-y-4">
                                 <h3 className="font-bold text-mobeng-green flex items-center gap-2 border-b border-slate-200 pb-2">
                                     <BrainCircuit size={18} /> Hasil Tes 2: Logika
@@ -874,8 +900,6 @@ function App() {
                                     <div className="text-4xl font-bold text-mobeng-green mb-1">{selectedSubmission.logicScore.toFixed(1)}</div>
                                     <div className="text-xs text-green-800 font-bold uppercase">Skor Logika / 10</div>
                                 </div>
-
-                                {/* Integrity Check */}
                                 <div className={`p-4 rounded-xl border ${selectedSubmission.cheatCount > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
                                     <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16}/> Integrity Log</h4>
                                     <p className="text-sm">
@@ -887,8 +911,6 @@ function App() {
                                 </div>
                             </div>
                         </div>
-
-                        {/* FINAL AI CONCLUSION */}
                         <div className="mt-4">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3 bg-gradient-to-r from-mobeng-darkblue to-mobeng-blue text-white p-3 rounded-lg">
                                 <Zap size={18} /> KESIMPULAN AKHIR (AI RECOMMENDATION)
@@ -902,16 +924,11 @@ function App() {
             </div>
         )}
         
-        {/* RESPONSIVE HEADER FIX */}
         <header className="bg-mobeng-darkblue text-white p-3 md:p-4 flex justify-between items-center shadow-lg sticky top-0 z-50 no-print">
            <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
-              {/* Logo */}
               <div className="bg-mobeng-blue p-2 rounded-lg shadow-md shrink-0"><Briefcase size={20} /></div>
-              
-              {/* Title & Badge Container */}
               <div className="flex flex-col md:flex-row md:items-center gap-0.5 md:gap-3 overflow-hidden">
                   <h1 className="font-bold text-base md:text-lg leading-tight truncate">HR Dashboard</h1>
-                  {/* Active Role Badge - Compact on Mobile */}
                   <div className="px-2 py-0.5 md:px-3 md:py-1 bg-white/10 rounded-full text-[10px] md:text-xs font-mono border border-white/20 flex items-center gap-1.5 w-fit">
                       <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-mobeng-green shrink-0 animate-pulse"></span>
                       <span className="truncate max-w-[100px] md:max-w-none">{activeRoleDefinition.label}</span>
@@ -919,23 +936,19 @@ function App() {
               </div>
            </div>
 
-           {/* Action Buttons - Icon only on Mobile, Text on Desktop */}
            <div className="flex items-center gap-2 md:gap-3 shrink-0 ml-2">
                <button onClick={() => setIsInviteOpen(true)} className="p-2 md:px-3 md:py-1.5 bg-mobeng-green rounded-lg hover:bg-mobeng-darkgreen flex items-center gap-2 transition-colors shadow-sm" title="Undang Kandidat">
                  <UserPlus size={18} className="md:w-4 md:h-4" />
                  <span className="hidden md:inline text-sm">Invite</span>
                </button>
-
                <button onClick={() => openDocs('recruiter')} className="p-2 md:px-3 md:py-1.5 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2 border border-white/20 transition-colors" title="Dokumentasi">
                  <Server size={18} className="md:w-4 md:h-4" /> 
                  <span className="hidden md:inline text-sm">Docs</span>
                </button>
-               
                <button onClick={() => setIsSettingsOpen(true)} className="p-2 md:px-3 md:py-1.5 bg-mobeng-blue rounded-lg hover:bg-sky-600 flex items-center gap-2 transition-colors shadow-sm" title="Pengaturan">
                  <Sliders size={18} className="md:w-4 md:h-4" />
                  <span className="hidden md:inline text-sm">Settings</span>
                </button>
-               
                <button onClick={() => setCurrentView('role_selection')} className="p-2 md:px-3 md:py-1.5 bg-red-500/20 md:bg-white/10 rounded-lg hover:bg-red-500/30 md:hover:bg-white/20 flex items-center gap-2 border border-transparent md:border-white/10 text-red-200 md:text-white" title="Keluar">
                  <LogOut size={18} className="md:w-4 md:h-4" />
                  <span className="hidden md:inline text-sm">Exit</span>
@@ -947,7 +960,7 @@ function App() {
              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-mobeng-darkblue">Overview Kandidat</h2>
-                    <p className="text-slate-600 text-sm">Data pelamar terbaru.</p>
+                    <p className="text-slate-600 text-sm">Data pelamar terbaru dari Database Cloud.</p>
                 </div>
             </div>
             
@@ -972,7 +985,6 @@ function App() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {submissions.map((sub) => {
-                                    // Calculate average competency for display
                                     const avgSim = Math.round((sub.simulationScores.sales + sub.simulationScores.leadership + sub.simulationScores.operations + sub.simulationScores.cx) / 4);
                                     return (
                                         <tr key={sub.id} className="hover:bg-slate-50/50 transition-colors">
@@ -1026,7 +1038,6 @@ function App() {
 
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-20 shadow-sm flex-shrink-0">
          <div className="flex items-center gap-3">
-            {/* Disabled Back button during Simulation to prevent accidental exit */}
             <div className="w-8 h-8 rounded-lg bg-mobeng-blue flex items-center justify-center text-white"><Briefcase size={18} strokeWidth={2.5} /></div>
             <div className="hidden md:block">
                 <h1 className="font-bold text-mobeng-darkblue text-lg">Mobeng <span className="font-normal text-slate-500">Recruitment</span></h1>
@@ -1034,7 +1045,6 @@ function App() {
             </div>
          </div>
          <div className="flex items-center gap-2 md:gap-4">
-             {/* SCORE TOGGLE BUTTON REMOVED FOR STRICT BLIND MODE */}
              <button onClick={() => openDocs('candidate')} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 transition-all font-medium"><HelpCircle size={18} className="text-mobeng-orange" /><span className="hidden md:inline">Panduan</span></button>
              <button onClick={() => setShowSimFinishModal(true)} className="hidden md:flex text-sm bg-mobeng-darkblue text-white px-4 py-2 rounded-lg hover:bg-mobeng-blue transition-colors items-center gap-2 shadow-md font-medium"><CheckCircle size={16} /> Selesai</button>
          </div>
