@@ -1,5 +1,9 @@
 
+
 -- JALANKAN KODE INI DI SUPABASE SQL EDITOR --
+
+-- UPDATE SCHEMA (Jika tabel sudah ada, jalankan baris ALTER TABLE ini saja)
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS chat_history JSONB;
 
 -- 1. Tabel untuk menyimpan hasil tes kandidat
 CREATE TABLE IF NOT EXISTS submissions (
@@ -17,6 +21,9 @@ CREATE TABLE IF NOT EXISTS submissions (
   psychometrics JSONB,
   final_summary TEXT,
   cheat_count INTEGER DEFAULT 0,
+  
+  -- ADDED: Kolom untuk menyimpan riwayat chat
+  chat_history JSONB,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );

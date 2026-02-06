@@ -70,28 +70,34 @@ export const generateFinalSummary = async (
     logicScore: number
 ): Promise<FinalAnalysisReport> => {
     try {
-        // UPDATED PROMPT FOR OWNER'S REQUEST (MOBENG EXCELLENCE FORMAT)
+        // UPDATED PROMPT: STRICT CORRELATION LOGIC + BEHAVIOR
         const prompt = `
-        Role: Expert I/O Psychologist & Recruitment Director at Mobeng (Automotive Retail).
-        Task: Analyze candidate performance based on SJT (Situational Judgement Test) and Logic Test.
+        Role: Expert I/O Psychologist & Senior Recruiter at Mobeng.
+        Task: CRITICALLY analyze candidate performance by correlating COGNITIVE ABILITY (Logic Test) with BEHAVIORAL COMPETENCE (Interview).
         
         Candidate: ${profile.name} (Position: ${role})
         
         DATA:
-        1. Behavioral SJT Scores (0-10): Sales(${simScores.sales}), Leadership(${simScores.leadership}), Ops(${simScores.operations}), CX(${simScores.cx})
-        2. AI Feedback Log: "${simFeedback}"
-        3. Logic Test Score: ${logicScore.toFixed(1)}/10
+        1. Logic Test Score: ${logicScore.toFixed(1)}/10 (Cognitive Baseline)
+        2. Behavioral SJT Scores: Sales(${simScores.sales}), Leadership(${simScores.leadership}), Ops(${simScores.operations}), CX(${simScores.cx})
+        3. AI Interview Log: "${simFeedback}"
         
-        MOBENG EXCELLENCE CULTURE:
-        1. **High Integrity**: Honest, transparent, no fraud.
-        2. **Customer Obsessed**: Service oriented, polite.
-        3. **Sat-Set (Pragmatic)**: Fast but safe, result oriented.
+        **MANDATORY CORRELATION ANALYSIS (RULES):**
+        - **If Logic < 5.0**: Check if their interview answers were unstructured, confusing, or lacked root-cause analysis. If yes, confirm "Low Cognitive Ability".
+        - **If Logic > 8.0 BUT Interview Scores < 6**: Flag as "Smart but Lazy/Arrogant" or "Poor Communication". High logic should correlate with structured thinking.
+        - **If Logic > 7.0 AND Interview > 8**: Validate as "High Potential / Star Performer".
+        - **If Logic < 5.0 BUT Interview > 8**: Check if they are just "Sweet Talkers" (Good words, low logic). Be skeptical of this pattern.
+
+        **EVALUATION CRITERIA (MOBENG STANDARD):**
+        1. **Substance over Style**: Did they give specific steps or just "sweet talk"?
+        2. **Action Oriented**: Did they take ownership or blame others?
         
         OUTPUT REQUIREMENT (JSON):
-        Analyze the data and map it to these specific categories requested by the Owner:
         
         1. **Culture Fit Score** (1-100):
-           - How well do they match the 3 Mobeng values above?
+           - < 60: Too theoretical, robotic, lacks integrity, or LOW LOGIC (<4).
+           - 60-80: Standard answers, safe player.
+           - > 85: Exceptional detail, high logic correlation, concrete steps.
            
         2. **Psychometrics (Big Five)**:
            - Derive OCEAN traits from their behavioral choices.
@@ -100,16 +106,19 @@ export const generateFinalSummary = async (
            Must follow this EXACT format inside the string (Markdown):
            
            "**Profil Psikometrik:**
-           [Jelaskan singkat 2 kalimat tentang karakter dominan kandidat. Apakah dia dominan, teliti, atau sosial?]
+           [Jelaskan 2 kalimat tentang karakter asli dan stabilitas emosi.]
            
-           **Potensi Red Flags:**
-           - [List negative traits found, e.g. 'Cenderung kompromi soal SOP', 'Kurang inisiatif', 'Jawaban terlalu singkat/malas', or 'Tidak ditemukan Red Flag signifikan']
+           **Analisa Kognitif & Logika:**
+           - [WAJIB bahas Skor Logika (${logicScore.toFixed(1)}). Contoh: 'Skor Logika rendah (4.0) tercermin dari jawaban yang tidak terstruktur', atau 'Kecerdasan logika tinggi (9.0) terlihat dari kemampuan analisa masalah yang tajam', atau 'Anomali: Skor logika tinggi namun jawaban interview tidak mencerminkan kemampuan tersebut'.]
+
+           **Analisa Kritis (Red Flags):**
+           - [List kelemahan fatal. Contoh: 'Jawaban terlalu normatif', 'Cenderung menghindari konflik', 'Kurang detail teknis'.]
            
            **Prediksi Performa:**
-           [Kategorikan: 'RUNNER' (Tipe Pengejar Target/Proaktif/Ambisius) atau 'FOLLOWER' (Tipe Pasif/Menunggu Perintah/Safety Player). Jelaskan alasannya.]
+           [Kategorikan: 'NATO (No Action Talk Only)', 'EXECUTOR' (Pekerja Keras), atau 'STRATEGIST'. Jelaskan alasannya.]
            
            **Rekomendasi Akhir:**
-           [Pilih satu: 'INTERVIEW SEGERA', 'SIMPAN SEBAGAI CADANGAN', atau 'GUGURKAN']"
+           [Pilih satu: 'PRIORITAS UTAMA', 'DIPERTIMBANGKAN', atau 'TIDAK DISARANKAN']"
            
         JSON STRUCTURE:
         {

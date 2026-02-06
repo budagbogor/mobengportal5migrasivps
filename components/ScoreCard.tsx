@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AssessmentScores, BigFiveTraits } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
@@ -12,12 +13,22 @@ interface ScoreCardProps {
 }
 
 const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit, starScore, feedback }) => {
+  // SAFETY CHECK: Prevent crash if scores are missing
+  if (!scores) {
+      return (
+          <div className="p-6 bg-slate-50 rounded-xl text-center border border-slate-200">
+              <AlertCircle className="mx-auto text-slate-400 mb-2" size={24} />
+              <p className="text-slate-500 text-sm font-medium">Data penilaian belum tersedia.</p>
+          </div>
+      );
+  }
+
   // Using Mobeng Brand Colors for charts
   const competencyData = [
-    { name: 'Sales', value: scores.sales, color: '#0085CA', icon: TrendingUp },  
-    { name: 'Lead', value: scores.leadership, color: '#005480', icon: Users },   
-    { name: 'Ops', value: scores.operations, color: '#F37021', icon: ShieldAlert }, 
-    { name: 'CX', value: scores.cx, color: '#78BE20', icon: HeartHandshake },    
+    { name: 'Sales', value: scores.sales || 0, color: '#0085CA', icon: TrendingUp },  
+    { name: 'Lead', value: scores.leadership || 0, color: '#005480', icon: Users },   
+    { name: 'Ops', value: scores.operations || 0, color: '#F37021', icon: ShieldAlert }, 
+    { name: 'CX', value: scores.cx || 0, color: '#78BE20', icon: HeartHandshake },    
   ];
 
   // Prepare Radar Data (Big Five)
@@ -30,7 +41,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit
   ] : [];
 
   const average = Math.round(
-    (scores.sales + scores.leadership + scores.operations + scores.cx) / 4
+    ((scores.sales || 0) + (scores.leadership || 0) + (scores.operations || 0) + (scores.cx || 0)) / 4
   );
 
   let statusColor = 'text-slate-600';
@@ -54,7 +65,8 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit
   }
 
   return (
-    <div className="flex flex-col h-full bg-white md:bg-transparent overflow-y-auto pr-2">
+    // CHANGED: Removed h-full, overflow-y-auto. Added w-full.
+    <div className="flex flex-col w-full bg-white md:bg-transparent">
       {/* Header Score */}
       <div className="mb-6">
         <div className="flex justify-between items-end mb-2">
@@ -98,11 +110,11 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit
 
       {/* Psychometric Radar (Only visible if data exists) */}
       {psychometrics && (
-         <div className="mb-6 bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+         <div className="mb-6 bg-white rounded-xl shadow-sm border border-slate-100 p-4 print:break-inside-avoid">
             <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
                 <Brain size={12}/> Psychometric (Big 5)
             </h4>
-            <div className="h-[200px] -ml-4">
+            <div className="h-[250px] -ml-4">
                 <ResponsiveContainer width="100%" height="100%">
                     <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
                     <PolarGrid stroke="#e2e8f0" />
@@ -125,7 +137,7 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit
 
       {/* Culture & STAR Score */}
       {(cultureFit !== undefined && starScore !== undefined) && (
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-6 print:break-inside-avoid">
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                   <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">Culture Fit</div>
                   <div className="text-xl font-bold text-mobeng-darkblue">{cultureFit}%</div>
@@ -143,8 +155,8 @@ const ScoreCard: React.FC<ScoreCardProps> = ({ scores, psychometrics, cultureFit
           </div>
       )}
 
-      {/* Feedback Section */}
-      <div className="flex-1 flex flex-col min-h-0">
+      {/* Feedback Section - Remove flex-1 to allow auto height */}
+      <div className="flex flex-col mt-auto w-full print:break-inside-avoid">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
             AI Recruiter Insights
         </h4>

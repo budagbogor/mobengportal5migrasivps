@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Message, Sender, AnalysisResult, CandidateSubmission, CandidateProfile, AppSettings, ROLE_DEFINITIONS, RoleType, BigFiveTraits } from './types';
@@ -8,11 +9,11 @@ import ScoreCard from './components/ScoreCard';
 import DocumentationModal from './components/DocumentationModal';
 import ProctoringCam from './components/ProctoringCam'; // IMPORT NEW COMPONENT
 import { LogicTest, QUESTION_SETS } from './components/LogicTest';
-import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban, EyeOff } from 'lucide-react';
+import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban, EyeOff, MousePointerClick, Smartphone, Globe, ShieldCheck, Trash2, MessageSquareText, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown for Dashboard
 import remarkGfm from 'remark-gfm';
 
-type AppView = 'role_selection' | 'candidate_intro' | 'simulation' | 'logic_test_intro' | 'logic_test' | 'recruiter_login' | 'recruiter_dashboard' | 'link_expired';
+type AppView = 'role_selection' | 'candidate_intro' | 'integrity_briefing' | 'logic_test_intro' | 'logic_test' | 'simulation_intro' | 'simulation' | 'recruiter_login' | 'recruiter_dashboard' | 'link_expired';
 
 interface InviteToken {
     id: string;      // Unique Token ID
@@ -55,6 +56,7 @@ function App() {
   
   const [submissions, setSubmissions] = useState<CandidateSubmission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<CandidateSubmission | null>(null);
+  const [showChatLog, setShowChatLog] = useState(false); // NEW STATE for Chat Toggle
 
   // Integrity / Anti-Cheat
   const [cheatCount, setCheatCount] = useState(0);
@@ -73,8 +75,8 @@ function App() {
     isInterviewOver: false
   });
 
-  // Temporary storage for Sim Results before Test 2
-  const [tempSimResult, setTempSimResult] = useState<AnalysisResult | null>(null);
+  // Storage for Test 1 (Logic) Results before Test 2 (Sim)
+  const [tempLogicScore, setTempLogicScore] = useState<number | null>(null);
 
   // Derived active definition
   const activeRoleDefinition = ROLE_DEFINITIONS[appSettings.activeRole];
@@ -153,16 +155,17 @@ function App() {
                     profile: item.profile_data,
                     role: item.role,
                     timestamp: new Date(item.created_at),
-                    simulationScores: item.simulation_scores,
+                    simulationScores: item.simulation_scores || { sales: 0, leadership: 0, operations: 0, cx: 0 },
                     // FIX: Map real feedback from final_summary (or fallback) instead of hardcoded string
                     simulationFeedback: item.final_summary ? "Lihat Kesimpulan Akhir di bawah." : "Belum ada analisis.", 
                     psychometrics: item.psychometrics,
-                    cultureFitScore: item.culture_fit_score,
+                    cultureFitScore: item.culture_fit_score || 0,
                     starMethodScore: 0, // Assume 0 if not stored or structure differently
-                    logicScore: item.logic_score,
+                    logicScore: item.logic_score || 0,
                     finalSummary: item.final_summary,
-                    status: item.status,
-                    cheatCount: item.cheat_count
+                    status: item.status || 'Consider',
+                    cheatCount: item.cheat_count || 0,
+                    chatHistory: item.chat_history || [] // NEW: Map chat history
                 }));
                 setSubmissions(mappedSubmissions);
             }
@@ -242,17 +245,33 @@ function App() {
     );
   };
 
-  // Called from Candidate Intro Form -> STARTS TEST 1 (Simulation)
+  // Called from Candidate Intro Form -> Go to INTEGRITY BRIEFING
   const handleProfileSubmit = () => {
     if (!isProfileComplete()) {
         alert("Mohon lengkapi data profil Anda terlebih dahulu.");
         return;
     }
-    
+    setCurrentView('integrity_briefing');
+  };
+
+  // Called from Integrity Briefing -> STARTS LOGIC TEST (STAGE 1)
+  const proceedToLogicTestIntro = () => {
+      setCurrentView('logic_test_intro');
+  }
+
+  // Called from Logic Test Complete -> Go to SIMULATION INTRO
+  const handleLogicTestComplete = (score: number, passed: boolean) => {
+      setTempLogicScore(score);
+      setCurrentView('simulation_intro');
+  }
+
+  // Called from Simulation Intro -> STARTS SIMULATION (STAGE 2)
+  const startSimulation = () => {
     // Initialize Simulation
-    setTempSimResult(null);
     setShowSimFinishModal(false);
-    setCheatCount(0); // Reset cheat count
+    // Note: Do not reset cheat count completely if you want to accumulate from Logic Test.
+    // If you want separate counts, reset here. Let's keep cumulative for now or just reset for this session.
+    // setCheatCount(0); 
     
     setCurrentAnalysis({
         scores: { sales: 0, leadership: 0, operations: 0, cx: 0 },
@@ -326,23 +345,18 @@ function App() {
       return 'Reject';
   }
 
-  // Finished Test 1 -> Transition to Test 2
-  const handleProceedToLogicTest = () => {
-      setTempSimResult(currentAnalysis); // Store Test 1 results
-      setShowSimFinishModal(false);
-      setCurrentView('logic_test_intro');
-  };
-
-  // Finished Test 2 -> Submit EVERYTHING (SUPABASE INTEGRATION)
-  const handleLogicTestComplete = async (score: number, passed: boolean) => {
+  // Finished Simulation (Stage 2) -> Submit EVERYTHING (SUPABASE INTEGRATION)
+  const handleFinalSubmission = async () => {
       setIsSubmitting(true);
       setSubmissionProgress('AI sedang menganalisa psikometri, kompetensi STAR, dan culture fit...');
       
-      // Safety check if sim result missing (shouldn't happen in flow)
-      const simData = tempSimResult || {
+      // Safety check
+      const simData = currentAnalysis || {
           scores: { sales: 0, leadership: 0, operations: 0, cx: 0 },
           feedback: "Data simulasi tidak ditemukan."
       };
+      
+      const logicScore = tempLogicScore || 0;
 
       try {
           // Generate Final AI Summary (SOPHISTICATED VERSION)
@@ -351,11 +365,11 @@ function App() {
               activeRoleDefinition.label,
               simData.scores,
               simData.feedback,
-              score
+              logicScore
           );
 
           const newSubmissionId = uuidv4();
-          const calculatedStatus = calculateOverallStatus(simData.scores, score);
+          const calculatedStatus = calculateOverallStatus(simData.scores, logicScore);
 
           // 1. Prepare Payload for Supabase
           const dbPayload = {
@@ -363,14 +377,15 @@ function App() {
               candidate_name: candidateProfile.name,
               candidate_phone: candidateProfile.phone,
               role: activeRoleDefinition.label,
-              logic_score: score,
+              logic_score: logicScore,
               culture_fit_score: finalReport.cultureFitScore,
               status: calculatedStatus,
               profile_data: candidateProfile,
               simulation_scores: simData.scores,
               psychometrics: finalReport.psychometrics,
               final_summary: finalReport.summary,
-              cheat_count: cheatCount
+              cheat_count: cheatCount,
+              chat_history: messages // NEW: Save Messages to DB
           };
 
           // 2. Insert into Submissions Table
@@ -395,10 +410,11 @@ function App() {
               psychometrics: finalReport.psychometrics,
               cultureFitScore: finalReport.cultureFitScore,
               starMethodScore: finalReport.starMethodScore,
-              logicScore: score,
+              logicScore: logicScore,
               finalSummary: finalReport.summary,
               status: calculatedStatus,
-              cheatCount: cheatCount
+              cheatCount: cheatCount,
+              chatHistory: messages
           };
           setSubmissions(prev => [newLocalSubmission, ...prev]);
 
@@ -423,6 +439,29 @@ function App() {
           alert("Gagal menyimpan data ke server. Mohon screenshot hasil ini dan kirim ke HR.");
           setIsSubmitting(false);
       }
+  };
+  
+  // --- DELETE SUBMISSION FUNCTION ---
+  const handleDeleteSubmission = async (id: string, name: string) => {
+    if (window.confirm(`Apakah Anda yakin ingin MENGHAPUS PERMANEN data kandidat: ${name}?\n\nTindakan ini tidak dapat dibatalkan.`)) {
+        try {
+            const { error } = await supabase.from('submissions').delete().eq('id', id);
+            
+            if (error) throw error;
+            
+            // Optimistic update
+            setSubmissions(prev => prev.filter(sub => sub.id !== id));
+            
+            // If the deleted submission was currently open in modal, close it
+            if (selectedSubmission?.id === id) {
+                setSelectedSubmission(null);
+            }
+            
+        } catch (err) {
+            console.error("Error deleting submission:", err);
+            alert("Gagal menghapus data. Mohon coba lagi.");
+        }
+    }
   };
 
   const handleRecruiterLogin = (e: React.FormEvent) => {
@@ -539,7 +578,7 @@ function App() {
                 <h2 className="text-2xl font-bold text-white mb-2">Akses Kandidat</h2>
                 <p className="text-blue-50 text-sm mb-6 font-medium">Mulai proses seleksi untuk posisi <span className="text-mobeng-green font-bold bg-white/10 px-2 py-0.5 rounded">{activeRoleDefinition.label}</span>.</p>
                 <div className="text-white/70 text-xs mb-4 px-4 py-2 bg-black/20 rounded-lg">
-                    <span className="font-bold">Wajib:</span> Tes Simulasi (Chat) <ArrowRight size={10} className="inline"/> Tes Logika
+                    <span className="font-bold">Wajib:</span> Tes Logika <ArrowRight size={10} className="inline"/> Simulasi Interview
                 </div>
                 <span className="text-mobeng-green bg-white py-2 px-4 rounded-full font-bold text-sm flex items-center gap-2 group-hover:translate-x-1 transition-transform shadow-lg">
                     Isi Biodata & Mulai <ChevronRight size={16} />
@@ -566,10 +605,6 @@ function App() {
       </div>
     )
   }
-
-  // ... (Candidate Intro, Logic Test Intro, Logic Test View, Recruiter Login - Unchanged except for imports and state references)
-  // To save space, assuming those blocks remain mostly the same visually, but using updated state.
-  // The significant logic changes were in useEffect and handleLogicTestComplete above.
   
   // 2. CANDIDATE INTRO SCREEN
   if (currentView === 'candidate_intro') {
@@ -608,8 +643,8 @@ function App() {
               <div className="bg-white/10 rounded-xl p-4 border border-white/10 text-sm">
                   <strong className="block text-white mb-2">Alur Tes:</strong>
                   <ol className="list-decimal list-inside space-y-2 text-blue-50">
-                      <li>Simulasi Interview (Roleplay)</li>
                       <li>Tes Logika & Ketelitian</li>
+                      <li>Simulasi Interview (Roleplay)</li>
                   </ol>
               </div>
             </div>
@@ -662,7 +697,7 @@ function App() {
             </div>
             
             <button onClick={handleProfileSubmit} disabled={!isProfileComplete()} className="group mt-auto w-full bg-mobeng-darkblue hover:bg-mobeng-green disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl text-lg transition-all shadow-xl hover:shadow-mobeng-green/20 flex items-center justify-center gap-3 transform active:scale-[0.98]">
-              Mulai Tes 1: Simulasi <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              Lanjut <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
         </div>
@@ -670,18 +705,95 @@ function App() {
     );
   }
 
-  // 3. LOGIC TEST INTRO
+  // 3. INTEGRITY BRIEFING (NEW VIEW)
+  if (currentView === 'integrity_briefing') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans overflow-y-auto">
+         <div className="max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300 my-4">
+             {/* Header */}
+             <div className="bg-gradient-to-r from-red-600 to-red-700 p-6 text-white text-center">
+                 <ShieldAlert size={48} className="mx-auto mb-3 opacity-90" />
+                 <h2 className="text-2xl font-bold uppercase tracking-wide">Pakta Integritas & Aturan Ujian</h2>
+                 <p className="text-red-100 text-sm mt-1">Wajib dibaca dan dipatuhi sebelum memulai tes.</p>
+             </div>
+
+             <div className="p-8 space-y-8">
+                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                     <p className="text-red-800 text-sm font-medium leading-relaxed">
+                         <strong>Peringatan Keras:</strong> Sistem Mobeng menggunakan teknologi <i>AI Proctoring</i> canggih. Segala bentuk aktivitas mencurigakan akan dicatat secara otomatis dalam laporan akhir Anda dan dapat menyebabkan diskualifikasi otomatis.
+                     </p>
+                 </div>
+
+                 <div className="space-y-4">
+                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                         <Ban className="text-red-500" size={20} /> Larangan Keras (Do Not)
+                     </h3>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
+                             <Globe className="text-slate-500" size={24} />
+                             <h4 className="font-bold text-slate-800 text-sm">Dilarang Pindah Tab</h4>
+                             <p className="text-xs text-slate-600">
+                                 Sistem mencatat jika Anda membuka tab baru, browser lain, atau aplikasi lain. Fokus pada layar ujian.
+                             </p>
+                         </div>
+                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
+                             <MousePointerClick className="text-slate-500" size={24} />
+                             <h4 className="font-bold text-slate-800 text-sm">No Copy-Paste</h4>
+                             <p className="text-xs text-slate-600">
+                                 Fitur Copy, Cut, dan Paste dinonaktifkan. Dilarang menyalin soal ke ChatGPT atau menyalin jawaban dari luar.
+                             </p>
+                         </div>
+                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
+                             <EyeOff className="text-slate-500" size={24} />
+                             <h4 className="font-bold text-slate-800 text-sm">Wajah Wajib Terlihat</h4>
+                             <p className="text-xs text-slate-600">
+                                 Kamera AI akan memantau posisi wajah. Dilarang menoleh ke kiri/kanan berlebihan atau meninggalkan layar.
+                             </p>
+                         </div>
+                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
+                             <Smartphone className="text-slate-500" size={24} />
+                             <h4 className="font-bold text-slate-800 text-sm">Dilarang Bertanya</h4>
+                             <p className="text-xs text-slate-600">
+                                 Dilarang meminta bantuan orang lain di sekitar Anda. Mikrofon juga akan memantau kebisingan.
+                             </p>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div className="border-t border-slate-200 pt-6">
+                     <h3 className="text-lg font-bold text-slate-800 mb-3">Konsekuensi Pelanggaran</h3>
+                     <ul className="space-y-2 text-sm text-slate-600 list-disc list-inside">
+                         <li>Setiap perpindahan tab dihitung sebagai 1 Poin Kecurangan.</li>
+                         <li>Jika wajah hilang dari kamera > 3 detik, sistem mencatat anomali.</li>
+                         <li>Laporan "Integrity Log" akan dilampirkan bersama hasil skor Anda.</li>
+                         <li>Tim HRD berhak <strong>MENGGUGURKAN</strong> kandidat dengan skor kecurangan tinggi tanpa pemberitahuan.</li>
+                     </ul>
+                 </div>
+
+                 <button 
+                    onClick={proceedToLogicTestIntro}
+                    className="w-full py-4 bg-red-600 hover:bg-red-700 text-white text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2"
+                 >
+                     <ShieldCheck size={24} /> Saya Mengerti & Siap Mengerjakan
+                 </button>
+                 <p className="text-center text-xs text-slate-400 mt-2">Dengan menekan tombol di atas, Anda menyetujui seluruh aturan ujian Mobeng.</p>
+             </div>
+         </div>
+      </div>
+    )
+  }
+
+  // 3b. LOGIC TEST INTRO (Start of Stage 1)
   if (currentView === 'logic_test_intro') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 to-mobeng-darkblue flex items-center justify-center p-4">
              <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl p-8 text-center animate-in zoom-in-95 duration-300">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <CheckCircle2 size={40} className="text-mobeng-green" />
+                <div className="w-20 h-20 bg-mobeng-blue/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <BrainCircuit size={40} className="text-mobeng-blue" />
                 </div>
-                <h2 className="text-3xl font-bold text-slate-800 mb-2">Tes Simulasi Selesai!</h2>
+                <h2 className="text-3xl font-bold text-slate-800 mb-2">Tahap 1: Tes Logika</h2>
                 <p className="text-slate-600 mb-8 font-medium leading-relaxed">
-                    Terima kasih telah menyelesaikan sesi roleplay. <br/>
-                    Selanjutnya adalah <strong>Tes Logika & Ketelitian</strong>.
+                    Anda akan mengerjakan soal logika, hitungan dasar, dan ketelitian untuk mengukur kemampuan kognitif.
                 </p>
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-8 text-left text-sm text-slate-700 space-y-2">
                     <p className="flex items-center gap-2"><BrainCircuit size={16} className="text-mobeng-blue"/> <strong>Jumlah Soal:</strong> 10 Soal Pilihan Ganda</p>
@@ -689,7 +801,7 @@ function App() {
                     <p className="flex items-center gap-2"><Zap size={16} className="text-mobeng-green"/> <strong>Materi:</strong> Matematika Dasar, Deret Angka, Logika Verbal.</p>
                 </div>
                 <button onClick={() => setCurrentView('logic_test')} className="w-full py-4 bg-mobeng-blue hover:bg-mobeng-darkblue text-white font-bold rounded-xl transition-all shadow-lg text-lg flex items-center justify-center gap-2">
-                    Lanjut ke Tes Logika <ArrowRight size={20} />
+                    Mulai Tes Logika <ArrowRight size={20} />
                 </button>
              </div>
         </div>
@@ -698,17 +810,6 @@ function App() {
 
   // 4. LOGIC TEST
   if (currentView === 'logic_test') {
-      if (isSubmitting) {
-          return (
-              <div className="min-h-screen bg-mobeng-lightgrey flex flex-col items-center justify-center p-4">
-                  <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full">
-                      <Loader2 size={48} className="animate-spin text-mobeng-blue mx-auto mb-4" />
-                      <h3 className="text-xl font-bold text-slate-800 mb-2">Menyimpan Hasil Tes</h3>
-                      <p className="text-slate-600 text-sm">{submissionProgress}</p>
-                  </div>
-              </div>
-          )
-      }
       return (
           // ADDED select-none class here
           <div className="min-h-screen bg-mobeng-lightgrey flex items-center justify-center p-4 select-none">
@@ -719,6 +820,38 @@ function App() {
                 onExit={() => alert("Tes ini wajib diselesaikan.")} 
               />
           </div>
+      )
+  }
+
+  // 5. SIMULATION INTRO (NEW TRANSITION VIEW)
+  if (currentView === 'simulation_intro') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-mobeng-darkblue flex items-center justify-center p-4">
+             <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl p-8 text-center animate-in zoom-in-95 duration-300">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CheckCircle2 size={40} className="text-mobeng-green" />
+                </div>
+                <h2 className="text-3xl font-bold text-slate-800 mb-2">Tahap 1 Selesai!</h2>
+                <p className="text-slate-600 mb-2 font-medium">Skor logika Anda telah tersimpan.</p>
+                <div className="w-full border-b border-slate-200 my-6"></div>
+                
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Masuk Tahap 2: Roleplay</h2>
+                <p className="text-slate-600 mb-8 font-medium leading-relaxed">
+                    Selanjutnya adalah <strong>Simulasi Interview (Chat)</strong> dengan AI. Anda akan diberikan 5 skenario kasus yang harus diselesaikan.
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-8 text-left text-sm text-yellow-800 space-y-2">
+                    <p className="flex items-center gap-2 font-bold"><AlertTriangle size={16}/> Instruksi Khusus:</p>
+                    <ul className="list-disc list-inside ml-1">
+                        <li>Jawablah seolah-olah Anda sedang bekerja nyata.</li>
+                        <li>Gunakan bahasa yang sopan dan solutif.</li>
+                        <li>Gunakan tombol Mikrofon jika ingin menjawab via suara.</li>
+                    </ul>
+                </div>
+                <button onClick={startSimulation} className="w-full py-4 bg-mobeng-green hover:bg-mobeng-darkgreen text-white font-bold rounded-xl transition-all shadow-lg text-lg flex items-center justify-center gap-2">
+                    Mulai Simulasi <ArrowRight size={20} />
+                </button>
+             </div>
+        </div>
       )
   }
 
@@ -741,9 +874,183 @@ function App() {
         </div>
       )
   }
-
+  
   // 6. RECRUITER DASHBOARD
   if (currentView === 'recruiter_dashboard') {
+    
+    // --------------------------------------------------------------------------------
+    // VIEW STATE 1: CANDIDATE DETAIL (FULL PAGE)
+    // --------------------------------------------------------------------------------
+    if (selectedSubmission) {
+        return (
+            <div className="min-h-screen bg-slate-50 font-sans">
+                {/* ID used for Print CSS targeting */}
+                <div id="printable-modal" className="bg-white min-h-screen relative">
+                     {/* Sticky Header */}
+                     <div className="bg-mobeng-darkblue p-4 md:p-6 sticky top-0 z-50 flex justify-between items-center text-white no-print shadow-lg">
+                        <div className="flex items-center gap-4">
+                            <button 
+                                onClick={() => setSelectedSubmission(null)} 
+                                className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors flex items-center justify-center"
+                                title="Kembali ke Daftar"
+                            >
+                                <ArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <h2 className="text-xl md:text-2xl font-bold leading-tight">{selectedSubmission.profile.name}</h2>
+                                <p className="text-blue-100 text-xs md:text-sm flex items-center gap-2 mt-1">
+                                    <Briefcase size={14} /> Posisi: {selectedSubmission.role}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                             <button onClick={() => sendWhatsApp(selectedSubmission)} className="bg-mobeng-green hover:bg-mobeng-darkgreen text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm">
+                                <Share2 size={16} /> <span className="hidden md:inline">WhatsApp</span>
+                            </button>
+                            <button onClick={() => window.print()} className="bg-mobeng-blue hover:bg-sky-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm border border-white/20">
+                                <Printer size={16} /> <span className="hidden md:inline">Print/PDF</span>
+                            </button>
+                             <button 
+                                onClick={() => handleDeleteSubmission(selectedSubmission.id, selectedSubmission.profile.name)}
+                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm"
+                            >
+                                <Trash2 size={16} /> <span className="hidden md:inline">Hapus</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Content Container (Full Width, Centered) */}
+                    <div className="p-4 md:p-8 max-w-5xl mx-auto flex flex-col gap-6 pb-20">
+                         {/* Personal Info Grid */}
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                 <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pendidikan</div>
+                                 <div className="font-semibold text-slate-800">{selectedSubmission.profile.education} - {selectedSubmission.profile.major}</div>
+                             </div>
+                             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                 <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pengalaman</div>
+                                 <div className="font-semibold text-slate-800">{selectedSubmission.profile.lastPosition} @ {selectedSubmission.profile.lastCompany} ({selectedSubmission.profile.experienceYears} thn)</div>
+                             </div>
+                        </div>
+
+                        {/* Charts Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="col-span-1 md:col-span-2 space-y-4">
+                                <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2">
+                                    <MessageSquare size={18} /> Hasil Tes 1: Behavioral Simulation
+                                </h3>
+                                <div className="grid grid-cols-4 gap-2 text-center mb-4">
+                                        {[
+                                            { l: 'Sales', v: selectedSubmission.simulationScores.sales, c: 'bg-blue-100 text-blue-700' },
+                                            { l: 'Lead', v: selectedSubmission.simulationScores.leadership, c: 'bg-indigo-100 text-indigo-700' },
+                                            { l: 'Ops', v: selectedSubmission.simulationScores.operations, c: 'bg-red-100 text-red-700' },
+                                            { l: 'CX', v: selectedSubmission.simulationScores.cx, c: 'bg-green-100 text-green-700' },
+                                        ].map((s) => (
+                                            <div key={s.l} className={`${s.c} p-3 rounded-lg print:border print:border-slate-300`}>
+                                                <div className="text-xs font-bold uppercase opacity-70">{s.l}</div>
+                                                <div className="text-xl font-bold">{s.v}</div>
+                                            </div>
+                                        ))}
+                                </div>
+                                {selectedSubmission.psychometrics && (
+                                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                        <h4 className="font-bold text-sm text-slate-600 mb-2 flex items-center gap-2"><Brain size={16}/> Psychometric Profile (Big Five)</h4>
+                                        <div className="w-full">
+                                            <ScoreCard 
+                                                scores={selectedSubmission.simulationScores} 
+                                                psychometrics={selectedSubmission.psychometrics}
+                                                cultureFit={selectedSubmission.cultureFitScore}
+                                                starScore={selectedSubmission.starMethodScore}
+                                                feedback={selectedSubmission.simulationFeedback}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-mobeng-green flex items-center gap-2 border-b border-slate-200 pb-2">
+                                    <BrainCircuit size={18} /> Hasil Tes 2: Logika
+                                </h3>
+                                <div className="bg-green-50 border border-green-100 p-6 rounded-xl text-center">
+                                    <div className="text-4xl font-bold text-mobeng-green mb-1">{selectedSubmission.logicScore.toFixed(1)}</div>
+                                    <div className="text-xs text-green-800 font-bold uppercase">Skor Logika / 10</div>
+                                </div>
+                                
+                                <div className={`p-4 rounded-xl border ${selectedSubmission.cheatCount > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                                    <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16}/> Integrity Log (Proctoring)</h4>
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-100 mb-2">
+                                         <span className="text-xs font-bold text-slate-500">Total Pelanggaran</span>
+                                         <span className={`text-xl font-bold ${selectedSubmission.cheatCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                             {selectedSubmission.cheatCount || 0}
+                                         </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-tight">
+                                        *Mencakup perpindahan tab browser, aplikasi background, dan deteksi wajah (menoleh/tidak ada di depan layar).
+                                    </p>
+                                    {selectedSubmission.cheatCount > 0 && (
+                                        <div className="mt-2 text-xs text-red-600 font-bold flex items-center gap-1 bg-red-100 p-2 rounded">
+                                            <EyeOff size={14} /> Indikasi Kecurangan Terdeteksi
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                         {/* CHAT LOG SECTION */}
+                         <div className="mt-4 border-t border-slate-200 pt-4 print:mt-6 print:border-none">
+                             <button 
+                                onClick={() => setShowChatLog(!showChatLog)}
+                                className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors text-slate-700 font-bold text-sm no-print"
+                             >
+                                <span className="flex items-center gap-2"><MessageSquareText size={18} className="text-mobeng-blue" /> Transkrip Chat Lengkap</span>
+                                {showChatLog ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                             </button>
+                             
+                             <div className={`${!showChatLog ? 'hidden' : ''} print:block mt-4 bg-slate-100 rounded-xl p-4 max-h-[400px] overflow-y-auto border border-slate-200 space-y-4 print:max-h-none print:overflow-visible print:bg-white print:border-none`}>
+                                 <h4 className="hidden print:block font-bold text-lg mb-4 border-b pb-2">Transkrip Percakapan Lengkap</h4>
+                                    {(selectedSubmission.chatHistory && selectedSubmission.chatHistory.length > 0) ? (
+                                        selectedSubmission.chatHistory.map((msg, idx) => (
+                                            <div key={idx} className={`flex ${msg.sender === Sender.USER ? 'justify-end' : 'justify-start'} print:break-inside-avoid`}>
+                                                <div className={`max-w-[85%] rounded-xl p-3 text-sm leading-relaxed ${
+                                                    msg.sender === Sender.USER 
+                                                    ? 'bg-mobeng-blue text-white rounded-tr-sm print:bg-slate-200 print:text-black print:border-slate-300' 
+                                                    : 'bg-white text-slate-800 border border-slate-200 rounded-tl-sm'
+                                                }`}>
+                                                    <div className="text-[10px] opacity-70 mb-1 font-bold uppercase">{msg.sender === Sender.USER ? 'Kandidat' : 'AI Recruiter'}</div>
+                                                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center text-slate-400 py-8 italic text-sm">
+                                            Riwayat percakapan tidak tersedia untuk kandidat ini.
+                                        </div>
+                                    )}
+                             </div>
+                         </div>
+
+                        <div className="mt-4">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3 bg-gradient-to-r from-mobeng-darkblue to-mobeng-blue text-white p-3 rounded-lg">
+                                <Zap size={18} /> KESIMPULAN AKHIR (AI RECOMMENDATION)
+                            </h3>
+                            <div className="bg-white border-2 border-slate-200 p-6 rounded-xl shadow-sm text-slate-800 leading-relaxed text-justify text-base">
+                                <ReactMarkdown 
+                                    remarkPlugins={[remarkGfm]}
+                                    className="prose prose-sm max-w-none prose-slate"
+                                >
+                                    {selectedSubmission.finalSummary || "Data kesimpulan tidak tersedia."}
+                                </ReactMarkdown>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // --------------------------------------------------------------------------------
+    // VIEW STATE 2: DASHBOARD LIST (TABLE)
+    // --------------------------------------------------------------------------------
     return (
       <div className="min-h-screen bg-slate-50 font-sans relative">
         <DocumentationModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} role={'recruiter'} />
@@ -870,122 +1177,6 @@ function App() {
                 </div>
             </div>
         )}
-
-        {/* Selected Submission Detail Modal */}
-        {selectedSubmission && (
-             <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
-                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm no-print" onClick={() => setSelectedSubmission(null)} />
-                <div id="printable-modal" className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                     <div className="bg-mobeng-darkblue p-6 flex justify-between items-start text-white no-print">
-                        <div>
-                            <h2 className="text-2xl font-bold">{selectedSubmission.profile.name}</h2>
-                            <p className="text-blue-100 text-sm flex items-center gap-2 mt-1">
-                                <Briefcase size={14} /> Posisi: {selectedSubmission.role}
-                            </p>
-                        </div>
-                        <div className="flex gap-2">
-                             <button onClick={() => sendWhatsApp(selectedSubmission)} className="bg-mobeng-green hover:bg-mobeng-darkgreen text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 transition-colors">
-                                <Share2 size={16} /> WA
-                            </button>
-                            <button onClick={() => window.print()} className="bg-mobeng-blue hover:bg-sky-600 text-white px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 transition-colors">
-                                <Printer size={16} /> PDF
-                            </button>
-                            <button onClick={() => setSelectedSubmission(null)} className="text-white/70 hover:text-white p-1 ml-2"><X size={24} /></button>
-                        </div>
-                    </div>
-                    
-                    <div className="p-6 md:p-8 overflow-y-auto max-h-[80vh] print:max-h-none print:overflow-visible flex flex-col gap-6">
-                         
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                 <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pendidikan</div>
-                                 <div className="font-semibold text-slate-800">{selectedSubmission.profile.education} - {selectedSubmission.profile.major}</div>
-                             </div>
-                             <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                 <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pengalaman</div>
-                                 <div className="font-semibold text-slate-800">{selectedSubmission.profile.lastPosition} @ {selectedSubmission.profile.lastCompany} ({selectedSubmission.profile.experienceYears} thn)</div>
-                             </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="col-span-1 md:col-span-2 space-y-4">
-                                <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2">
-                                    <MessageSquare size={18} /> Hasil Tes 1: Behavioral Simulation
-                                </h3>
-                                <div className="grid grid-cols-4 gap-2 text-center mb-4">
-                                        {[
-                                            { l: 'Sales', v: selectedSubmission.simulationScores.sales, c: 'bg-blue-100 text-blue-700' },
-                                            { l: 'Lead', v: selectedSubmission.simulationScores.leadership, c: 'bg-indigo-100 text-indigo-700' },
-                                            { l: 'Ops', v: selectedSubmission.simulationScores.operations, c: 'bg-red-100 text-red-700' },
-                                            { l: 'CX', v: selectedSubmission.simulationScores.cx, c: 'bg-green-100 text-green-700' },
-                                        ].map((s) => (
-                                            <div key={s.l} className={`${s.c} p-3 rounded-lg print:border print:border-slate-300`}>
-                                                <div className="text-xs font-bold uppercase opacity-70">{s.l}</div>
-                                                <div className="text-xl font-bold">{s.v}</div>
-                                            </div>
-                                        ))}
-                                </div>
-                                {selectedSubmission.psychometrics && (
-                                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                                        <h4 className="font-bold text-sm text-slate-600 mb-2 flex items-center gap-2"><Brain size={16}/> Psychometric Profile (Big Five)</h4>
-                                        <div className="h-[300px] w-full">
-                                            <ScoreCard 
-                                                scores={selectedSubmission.simulationScores} 
-                                                psychometrics={selectedSubmission.psychometrics}
-                                                cultureFit={selectedSubmission.cultureFitScore}
-                                                starScore={selectedSubmission.starMethodScore}
-                                                feedback={selectedSubmission.simulationFeedback}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="space-y-4">
-                                <h3 className="font-bold text-mobeng-green flex items-center gap-2 border-b border-slate-200 pb-2">
-                                    <BrainCircuit size={18} /> Hasil Tes 2: Logika
-                                </h3>
-                                <div className="bg-green-50 border border-green-100 p-6 rounded-xl text-center">
-                                    <div className="text-4xl font-bold text-mobeng-green mb-1">{selectedSubmission.logicScore.toFixed(1)}</div>
-                                    <div className="text-xs text-green-800 font-bold uppercase">Skor Logika / 10</div>
-                                </div>
-                                
-                                {/* IMPROVED PROCTORING LOG DISPLAY */}
-                                <div className={`p-4 rounded-xl border ${selectedSubmission.cheatCount > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
-                                    <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16}/> Integrity Log (Proctoring)</h4>
-                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-100 mb-2">
-                                         <span className="text-xs font-bold text-slate-500">Total Pelanggaran</span>
-                                         <span className={`text-xl font-bold ${selectedSubmission.cheatCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                             {selectedSubmission.cheatCount || 0}
-                                         </span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-500 leading-tight">
-                                        *Mencakup perpindahan tab browser, aplikasi background, dan deteksi wajah (menoleh/tidak ada di depan layar).
-                                    </p>
-                                    {selectedSubmission.cheatCount > 0 && (
-                                        <div className="mt-2 text-xs text-red-600 font-bold flex items-center gap-1 bg-red-100 p-2 rounded">
-                                            <EyeOff size={14} /> Indikasi Kecurangan Terdeteksi
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-4">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3 bg-gradient-to-r from-mobeng-darkblue to-mobeng-blue text-white p-3 rounded-lg">
-                                <Zap size={18} /> KESIMPULAN AKHIR (AI RECOMMENDATION)
-                            </h3>
-                            <div className="bg-white border-2 border-slate-200 p-6 rounded-xl shadow-sm text-slate-800 leading-relaxed text-justify text-base">
-                                <ReactMarkdown 
-                                    remarkPlugins={[remarkGfm]}
-                                    className="prose prose-sm max-w-none prose-slate"
-                                >
-                                    {selectedSubmission.finalSummary || "Data kesimpulan tidak tersedia."}
-                                </ReactMarkdown>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
         
         <header className="bg-mobeng-darkblue text-white p-3 md:p-4 flex justify-between items-center shadow-lg sticky top-0 z-50 no-print">
            <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
@@ -1062,8 +1253,15 @@ function App() {
                                                     {sub.status}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-right">
+                                            <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                                                 <button onClick={() => setSelectedSubmission(sub)} className="text-mobeng-blue hover:text-mobeng-darkblue text-xs font-bold">Detail</button>
+                                                <button 
+                                                    onClick={() => handleDeleteSubmission(sub.id, sub.profile.name)}
+                                                    className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Hapus Data"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
                                             </td>
                                         </tr>
                                     );
@@ -1078,78 +1276,94 @@ function App() {
     );
   }
 
-  // 7. SIMULATION VIEW (TEST 1)
-  return (
-    // ADDED select-none class here
-    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans relative select-none">
-      <DocumentationModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} role={'candidate'} />
-      
-      {/* ADDED PROCTORING CAM HERE */}
-      <ProctoringCam onViolation={handleProctoringViolation} isActive={true} />
+  // 7. SIMULATION VIEW (TEST 2)
+  if (currentView === 'simulation') {
+      if (isSubmitting) {
+          return (
+              <div className="min-h-screen bg-mobeng-lightgrey flex flex-col items-center justify-center p-4">
+                  <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full">
+                      <Loader2 size={48} className="animate-spin text-mobeng-blue mx-auto mb-4" />
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">Menyimpan Hasil Tes</h3>
+                      <p className="text-slate-600 text-sm">{submissionProgress}</p>
+                  </div>
+              </div>
+          )
+      }
+      return (
+        // ADDED select-none class here
+        <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans relative select-none">
+          <DocumentationModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} role={'candidate'} />
+          
+          {/* ADDED PROCTORING CAM HERE */}
+          <ProctoringCam onViolation={handleProctoringViolation} isActive={true} />
 
-      {showSimFinishModal && (
-          <div className="absolute inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
-             <div className="bg-white rounded-2xl max-w-lg w-full p-8 text-center shadow-2xl transform transition-all scale-100">
-                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-mobeng-green" /></div>
-                 <h2 className="text-2xl font-bold text-mobeng-darkblue mb-2">Sesi Wawancara Selesai!</h2>
-                 <p className="text-slate-600 mb-8 font-medium">Terima kasih, <strong>{candidateProfile.name}</strong>. Data simulasi Anda telah tersimpan sementara.</p>
-                 <div className="flex flex-col gap-3">
-                     <p className="text-xs text-slate-500 mb-2">Langkah selanjutnya: Tes Logika & Ketelitian (Wajib)</p>
-                     <button onClick={handleProceedToLogicTest} className="w-full py-3 px-4 bg-mobeng-blue text-white font-bold rounded-xl hover:bg-mobeng-darkblue transition-colors flex items-center justify-center gap-2 shadow-lg">
-                         Lanjut ke Tes Logika <ArrowRight size={18} />
-                     </button>
+          {showSimFinishModal && (
+              <div className="absolute inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">
+                 <div className="bg-white rounded-2xl max-w-lg w-full p-8 text-center shadow-2xl transform transition-all scale-100">
+                     <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-mobeng-green" /></div>
+                     <h2 className="text-2xl font-bold text-mobeng-darkblue mb-2">Seluruh Rangkaian Tes Selesai!</h2>
+                     <p className="text-slate-600 mb-8 font-medium">Terima kasih, <strong>{candidateProfile.name}</strong>. Anda telah menyelesaikan Tahap Logika & Simulasi.</p>
+                     <div className="flex flex-col gap-3">
+                         <p className="text-xs text-slate-500 mb-2">Klik tombol di bawah untuk menyimpan hasil tes Anda ke database.</p>
+                         <button onClick={handleFinalSubmission} className="w-full py-3 px-4 bg-mobeng-blue text-white font-bold rounded-xl hover:bg-mobeng-darkblue transition-colors flex items-center justify-center gap-2 shadow-lg">
+                             Simpan & Selesai <Save size={18} />
+                         </button>
+                     </div>
                  </div>
+              </div>
+          )}
+
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-20 shadow-sm flex-shrink-0">
+             <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-mobeng-blue flex items-center justify-center text-white"><Briefcase size={18} strokeWidth={2.5} /></div>
+                <div className="hidden md:block">
+                    <h1 className="font-bold text-mobeng-darkblue text-lg">Mobeng <span className="font-normal text-slate-500">Recruitment</span></h1>
+                    <div className="text-xs text-slate-500 flex items-center gap-1 font-medium"><UserCircle2 size={10}/> Kandidat: {candidateProfile.name}</div>
+                </div>
              </div>
-          </div>
-      )}
+             <div className="flex items-center gap-2 md:gap-4">
+                 <button onClick={() => openDocs('candidate')} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 transition-all font-medium"><HelpCircle size={18} className="text-mobeng-orange" /><span className="hidden md:inline">Panduan</span></button>
+                 <button onClick={() => setShowSimFinishModal(true)} className="hidden md:flex text-sm bg-mobeng-darkblue text-white px-4 py-2 rounded-lg hover:bg-mobeng-blue transition-colors items-center gap-2 shadow-md font-medium"><CheckCircle size={16} /> Selesai</button>
+             </div>
+          </header>
 
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 z-20 shadow-sm flex-shrink-0">
-         <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-mobeng-blue flex items-center justify-center text-white"><Briefcase size={18} strokeWidth={2.5} /></div>
-            <div className="hidden md:block">
-                <h1 className="font-bold text-mobeng-darkblue text-lg">Mobeng <span className="font-normal text-slate-500">Recruitment</span></h1>
-                <div className="text-xs text-slate-500 flex items-center gap-1 font-medium"><UserCircle2 size={10}/> Kandidat: {candidateProfile.name}</div>
-            </div>
-         </div>
-         <div className="flex items-center gap-2 md:gap-4">
-             <button onClick={() => openDocs('candidate')} className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 transition-all font-medium"><HelpCircle size={18} className="text-mobeng-orange" /><span className="hidden md:inline">Panduan</span></button>
-             <button onClick={() => setShowSimFinishModal(true)} className="hidden md:flex text-sm bg-mobeng-darkblue text-white px-4 py-2 rounded-lg hover:bg-mobeng-blue transition-colors items-center gap-2 shadow-md font-medium"><CheckCircle size={16} /> Selesai</button>
-         </div>
-      </header>
+          <div className="flex-1 flex overflow-hidden relative">
+            <main className="flex-1 flex flex-col h-full relative p-2 md:p-6 max-w-5xl mx-auto w-full">
+              <ChatInterface messages={messages} onSendMessage={handleSendMessage} isThinking={isThinking} />
+            </main>
 
-      <div className="flex-1 flex overflow-hidden relative">
-        <main className="flex-1 flex flex-col h-full relative p-2 md:p-6 max-w-5xl mx-auto w-full">
-          <ChatInterface messages={messages} onSendMessage={handleSendMessage} isThinking={isThinking} />
-        </main>
-
-        <aside className="hidden md:block w-80 lg:w-96 bg-white border-l border-slate-200 p-6 flex-shrink-0 overflow-y-auto transition-all">
-             <div className="sticky top-0">
-                {appSettings.allowCandidateViewScore ? (
-                    <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-                         <div className="flex items-center gap-2 mb-4 bg-blue-50 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold border border-blue-100">
-                             <BarChart3 size={14}/> Mode Transparan Aktif
-                         </div>
-                         <ScoreCard 
-                            scores={currentAnalysis?.scores || {sales:0, leadership:0, operations:0, cx:0}} 
-                            feedback={currentAnalysis?.feedback} 
-                         />
-                    </div>
-                ) : (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center animate-in fade-in duration-500">
-                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 mx-auto text-mobeng-blue"><Zap size={32} /></div>
-                        <h3 className="text-lg font-bold text-mobeng-darkblue mb-2">Mode Konsentrasi</h3>
-                        <p className="text-sm text-slate-600 leading-relaxed mb-6">Penilaian berjalan di latar belakang (Blind Test). Fokuslah menjawab setiap skenario dengan natural.</p>
-                        <div className="text-left text-xs text-slate-500 bg-white p-3 rounded-lg border border-slate-100">
-                            <p className="mb-2 font-bold text-slate-700">Aktif: {activeRoleDefinition.label}</p>
-                            <p className="italic text-slate-600">{activeRoleDefinition.description}</p>
+            <aside className="hidden md:block w-80 lg:w-96 bg-white border-l border-slate-200 p-6 flex-shrink-0 overflow-y-auto transition-all">
+                 <div className="sticky top-0">
+                    {appSettings.allowCandidateViewScore ? (
+                        <div className="animate-in fade-in slide-in-from-right-4 duration-500">
+                             <div className="flex items-center gap-2 mb-4 bg-blue-50 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold border border-blue-100">
+                                 <BarChart3 size={14}/> Mode Transparan Aktif
+                             </div>
+                             <ScoreCard 
+                                scores={currentAnalysis?.scores || {sales:0, leadership:0, operations:0, cx:0}} 
+                                feedback={currentAnalysis?.feedback} 
+                             />
                         </div>
-                    </div>
-                )}
-             </div>
-        </aside>
-      </div>
-    </div>
-  );
+                    ) : (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 text-center animate-in fade-in duration-500">
+                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 mx-auto text-mobeng-blue"><Zap size={32} /></div>
+                            <h3 className="text-lg font-bold text-mobeng-darkblue mb-2">Mode Konsentrasi</h3>
+                            <p className="text-sm text-slate-600 leading-relaxed mb-6">Penilaian berjalan di latar belakang (Blind Test). Fokuslah menjawab setiap skenario dengan natural.</p>
+                            <div className="text-left text-xs text-slate-500 bg-white p-3 rounded-lg border border-slate-100">
+                                <p className="mb-2 font-bold text-slate-700">Aktif: {activeRoleDefinition.label}</p>
+                                <p className="italic text-slate-600">{activeRoleDefinition.description}</p>
+                            </div>
+                        </div>
+                    )}
+                 </div>
+            </aside>
+          </div>
+        </div>
+      );
+  }
+
+  // Fallback return if something goes wrong with view state
+  return null;
 }
 
 export default App;

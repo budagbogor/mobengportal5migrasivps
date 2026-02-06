@@ -176,19 +176,22 @@ const ProctoringCam: React.FC<ProctoringCamProps> = ({ onViolation, isActive }) 
   }, [isActive, onViolation]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-[50] flex flex-col items-end pointer-events-none">
+    // RESPONSIVE POSITIONING:
+    // Mobile: fixed top-20 right-2 (Top Right, below header)
+    // Desktop (md): fixed bottom-4 right-4 (Bottom Right)
+    <div className="fixed top-20 right-2 md:top-auto md:bottom-4 md:right-4 z-[50] flex flex-col items-end pointer-events-none transition-all duration-300">
        {/* Status Badge */}
-       <div className={`mb-2 px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-2 text-xs font-bold transition-colors duration-300
+       <div className={`mb-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg shadow-lg flex items-center gap-2 text-[10px] md:text-xs font-bold transition-colors duration-300 backdrop-blur-sm bg-opacity-90
          ${status === 'OK' ? 'bg-green-100 text-green-700 border border-green-200' : 
            status === 'WARNING' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200 animate-pulse' : 
            'bg-red-100 text-red-700 border border-red-200 animate-bounce'}
        `}>
-          {status === 'OK' ? <ShieldCheck size={14}/> : status === 'WARNING' ? <Eye size={14}/> : <EyeOff size={14}/>}
+          {status === 'OK' ? <ShieldCheck size={12}/> : status === 'WARNING' ? <Eye size={12}/> : <EyeOff size={12}/>}
           {message}
        </div>
 
-       {/* Camera Feed */}
-       <div className={`relative w-32 h-24 bg-black rounded-lg overflow-hidden border-2 shadow-xl
+       {/* Camera Feed - Resized for Mobile */}
+       <div className={`relative w-24 h-18 md:w-32 md:h-24 bg-black rounded-lg overflow-hidden border-2 shadow-xl
          ${status === 'OK' ? 'border-green-400' : status === 'WARNING' ? 'border-yellow-400' : 'border-red-500'}
        `}>
           <Webcam
