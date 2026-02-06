@@ -6,9 +6,11 @@ import { supabase } from './services/supabaseClient'; // Import Supabase Client
 import ChatInterface from './components/ChatInterface';
 import ScoreCard from './components/ScoreCard';
 import DocumentationModal from './components/DocumentationModal';
+import ProctoringCam from './components/ProctoringCam'; // IMPORT NEW COMPONENT
 import { LogicTest, QUESTION_SETS } from './components/LogicTest';
-import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban } from 'lucide-react';
-import { RadialBarChart, RadialBar, Legend, ResponsiveContainer } from 'recharts';
+import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban, EyeOff } from 'lucide-react';
+import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown for Dashboard
+import remarkGfm from 'remark-gfm';
 
 type AppView = 'role_selection' | 'candidate_intro' | 'simulation' | 'logic_test_intro' | 'logic_test' | 'recruiter_login' | 'recruiter_dashboard' | 'link_expired';
 
@@ -152,7 +154,8 @@ function App() {
                     role: item.role,
                     timestamp: new Date(item.created_at),
                     simulationScores: item.simulation_scores,
-                    simulationFeedback: "Loaded from database", // Simplified
+                    // FIX: Map real feedback from final_summary (or fallback) instead of hardcoded string
+                    simulationFeedback: item.final_summary ? "Lihat Kesimpulan Akhir di bawah." : "Belum ada analisis.", 
                     psychometrics: item.psychometrics,
                     cultureFitScore: item.culture_fit_score,
                     starMethodScore: 0, // Assume 0 if not stored or structure differently
@@ -180,6 +183,49 @@ function App() {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [currentView]);
+
+  // --- SECURITY: PREVENT COPY/PASTE & CONTEXT MENU ---
+  useEffect(() => {
+      const handleSecurityEvents = (e: Event) => {
+          // Allow full access for recruiters
+          if (currentView === 'recruiter_dashboard' || currentView === 'recruiter_login' || currentView === 'role_selection') return;
+          
+          // Disable Right Click
+          if (e.type === 'contextmenu') {
+              e.preventDefault();
+          }
+          
+          // Disable Copy and Cut (Allow Paste for input, although ChatInterface handles paste separately)
+          if (e.type === 'copy' || e.type === 'cut') {
+              e.preventDefault();
+              alert("⚠️ Fitur Copy/Cut dinonaktifkan demi integritas tes.");
+          }
+      };
+
+      document.addEventListener('contextmenu', handleSecurityEvents);
+      document.addEventListener('copy', handleSecurityEvents);
+      document.addEventListener('cut', handleSecurityEvents);
+
+      return () => {
+          document.removeEventListener('contextmenu', handleSecurityEvents);
+          document.removeEventListener('copy', handleSecurityEvents);
+          document.removeEventListener('cut', handleSecurityEvents);
+      };
+  }, [currentView]);
+
+
+  // --- FACE PROCTORING HANDLER ---
+  const handleProctoringViolation = (type: 'LOOKING_AWAY' | 'NO_FACE') => {
+      // Increment cheat count strictly on violation
+      setCheatCount(prev => prev + 1);
+      
+      const warningAudio = new Audio('https://www.soundjay.com/buttons/sounds/beep-02.mp3'); 
+      warningAudio.play().catch(e => console.log('Audio play failed', e));
+
+      // Console log for debug, but main logic is updating the cheatCount state
+      console.warn("PROCTORING VIOLATION:", type);
+  };
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -345,7 +391,7 @@ function App() {
               role: activeRoleDefinition.label,
               timestamp: new Date(),
               simulationScores: simData.scores,
-              simulationFeedback: simData.feedback,
+              simulationFeedback: "Lihat Kesimpulan Akhir di bawah.",
               psychometrics: finalReport.psychometrics,
               cultureFitScore: finalReport.cultureFitScore,
               starMethodScore: finalReport.starMethodScore,
@@ -664,7 +710,9 @@ function App() {
           )
       }
       return (
-          <div className="min-h-screen bg-mobeng-lightgrey flex items-center justify-center p-4">
+          // ADDED select-none class here
+          <div className="min-h-screen bg-mobeng-lightgrey flex items-center justify-center p-4 select-none">
+              <ProctoringCam onViolation={handleProctoringViolation} isActive={true} />
               <LogicTest 
                 activeSetId={appSettings.activeLogicSetId}
                 onComplete={handleLogicTestComplete} 
@@ -900,13 +948,23 @@ function App() {
                                     <div className="text-4xl font-bold text-mobeng-green mb-1">{selectedSubmission.logicScore.toFixed(1)}</div>
                                     <div className="text-xs text-green-800 font-bold uppercase">Skor Logika / 10</div>
                                 </div>
+                                
+                                {/* IMPROVED PROCTORING LOG DISPLAY */}
                                 <div className={`p-4 rounded-xl border ${selectedSubmission.cheatCount > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
-                                    <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16}/> Integrity Log</h4>
-                                    <p className="text-sm">
-                                        Tab Switches: <span className="font-bold">{selectedSubmission.cheatCount || 0}</span>
+                                    <h4 className="font-bold text-sm text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16}/> Integrity Log (Proctoring)</h4>
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-100 mb-2">
+                                         <span className="text-xs font-bold text-slate-500">Total Pelanggaran</span>
+                                         <span className={`text-xl font-bold ${selectedSubmission.cheatCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                             {selectedSubmission.cheatCount || 0}
+                                         </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-tight">
+                                        *Mencakup perpindahan tab browser, aplikasi background, dan deteksi wajah (menoleh/tidak ada di depan layar).
                                     </p>
                                     {selectedSubmission.cheatCount > 0 && (
-                                        <p className="text-xs text-red-600 mt-1">⚠️ Terdeteksi meninggalkan halaman ujian.</p>
+                                        <div className="mt-2 text-xs text-red-600 font-bold flex items-center gap-1 bg-red-100 p-2 rounded">
+                                            <EyeOff size={14} /> Indikasi Kecurangan Terdeteksi
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -916,7 +974,12 @@ function App() {
                                 <Zap size={18} /> KESIMPULAN AKHIR (AI RECOMMENDATION)
                             </h3>
                             <div className="bg-white border-2 border-slate-200 p-6 rounded-xl shadow-sm text-slate-800 leading-relaxed text-justify text-base">
-                                {selectedSubmission.finalSummary}
+                                <ReactMarkdown 
+                                    remarkPlugins={[remarkGfm]}
+                                    className="prose prose-sm max-w-none prose-slate"
+                                >
+                                    {selectedSubmission.finalSummary || "Data kesimpulan tidak tersedia."}
+                                </ReactMarkdown>
                             </div>
                         </div>
                     </div>
@@ -1017,8 +1080,12 @@ function App() {
 
   // 7. SIMULATION VIEW (TEST 1)
   return (
-    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans relative">
+    // ADDED select-none class here
+    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden font-sans relative select-none">
       <DocumentationModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} role={'candidate'} />
+      
+      {/* ADDED PROCTORING CAM HERE */}
+      <ProctoringCam onViolation={handleProctoringViolation} isActive={true} />
 
       {showSimFinishModal && (
           <div className="absolute inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300">

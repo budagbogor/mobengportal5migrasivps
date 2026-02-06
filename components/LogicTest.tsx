@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Timer, CheckCircle2, AlertTriangle, ChevronRight, HelpCircle, ArrowRight, BrainCircuit } from 'lucide-react';
 
@@ -180,7 +181,7 @@ export const LogicTest: React.FC<LogicTestProps> = ({ onComplete, onExit, active
 
   if (isFinished) {
       return (
-          <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in zoom-in">
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center animate-in fade-in zoom-in select-none">
               <div className="w-20 h-20 bg-mobeng-blue/10 rounded-full flex items-center justify-center mb-6">
                   <BrainCircuit size={40} className="text-mobeng-blue animate-pulse" />
               </div>
@@ -194,7 +195,8 @@ export const LogicTest: React.FC<LogicTestProps> = ({ onComplete, onExit, active
   const currentQ = questions[currentIndex];
 
   return (
-    <div className="max-w-3xl mx-auto w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[600px] md:h-auto border border-slate-200">
+    // ADDED select-none class here
+    <div className="max-w-3xl mx-auto w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[600px] md:h-auto border border-slate-200 select-none">
       {/* Header */}
       <div className="bg-mobeng-darkblue text-white p-4 flex justify-between items-center z-10 relative">
         <div className="flex items-center gap-3">

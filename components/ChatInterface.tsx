@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Message, Sender } from '../types';
 import { Send, User, Bot, Loader2, Sparkles, ShieldAlert, Mic, MicOff, BarChart3 } from 'lucide-react';
@@ -119,7 +120,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
       </div>
 
       {/* 2. Content Area (ScrollView equivalent) */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-slate-50/50 scroll-smooth">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-slate-50/50 scroll-smooth select-none">
         {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-80 animate-in fade-in duration-500">
                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
@@ -203,7 +204,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
                     onChange={(e) => setInput(e.target.value)}
                     onPaste={handlePaste}
                     placeholder="Ketik jawaban Anda..."
-                    className="w-full bg-transparent border-none px-4 py-3.5 text-slate-800 placeholder-slate-400 focus:ring-0 text-sm md:text-base"
+                    className="w-full bg-transparent border-none px-4 py-3.5 text-slate-800 placeholder-slate-400 focus:ring-0 text-sm md:text-base select-text" 
                     disabled={isThinking}
                     autoFocus
                 />
