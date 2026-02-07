@@ -15,7 +15,7 @@ export const sendMessageToGemini = async (
       model: "gemini-3-flash-preview",
       config: {
         systemInstruction: systemInstruction, 
-        temperature: 0.3,
+        temperature: 0.3, // Low temperature to reduce hallucinations
       },
       history: history.slice(0, -1).map(msg => ({
         role: msg.sender === Sender.USER ? 'user' : 'model',
@@ -139,7 +139,8 @@ export const generateFinalSummary = async (
             model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
-                responseMimeType: "application/json"
+                responseMimeType: "application/json",
+                temperature: 0.3, // Explicitly set low temperature to prevent hallucinations
             }
         });
 
