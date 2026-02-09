@@ -2,8 +2,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AnalysisResult, AssessmentScores, CandidateProfile, BigFiveTraits } from "../types";
 
-const apiKey = process.env.API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey });
+// Helper to get the AI instance dynamically
+// Priorities: 1. LocalStorage (Admin Setting), 2. Environment Variable
+const getGenAI = () => {
+  const localKey = localStorage.getItem('gemini_api_key');
+  const finalKey = localKey || process.env.API_KEY;
+  
+  if (!finalKey) {
+    console.warn("API Key is missing. Please configure it in settings.");
+  }
+  
+  return new GoogleGenAI({ apiKey: finalKey });
+};
 
 export const sendMessageToGemini = async (
   history: Message[],
@@ -11,6 +21,9 @@ export const sendMessageToGemini = async (
   systemInstruction: string 
 ): Promise<{ text: string; analysis: AnalysisResult | null }> => {
   try {
+    // Create instance dynamically to pick up new keys immediately
+    const ai = getGenAI();
+
     const chat = ai.chats.create({
       model: "gemini-3-flash-preview",
       config: {
@@ -70,6 +83,9 @@ export const generateFinalSummary = async (
     logicScore: number
 ): Promise<FinalAnalysisReport> => {
     try {
+        // Create instance dynamically
+        const ai = getGenAI();
+
         // UPDATED PROMPT: STRICT CORRELATION LOGIC + BEHAVIOR
         const prompt = `
         Role: Expert I/O Psychologist & Senior Recruiter at Mobeng.
