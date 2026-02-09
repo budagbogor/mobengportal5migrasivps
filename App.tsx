@@ -43,7 +43,9 @@ function App() {
     const [appSettings, setAppSettings] = useState<AppSettings>({
         activeRole: 'store_leader', // Default
         activeLogicSetId: 'set_a',  // Default Question Set
-        allowCandidateViewScore: false // Default: Blind Mode (Can be toggled in settings)
+        allowCandidateViewScore: false, // Default: Blind Mode (Can be toggled in settings)
+        requireCamera: true, // Default: Camera Required
+        requireMicrophone: true // Default: Mic Required
     });
 
     // State for Settings Modal in Recruiter Dashboard
