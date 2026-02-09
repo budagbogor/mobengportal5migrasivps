@@ -22,7 +22,7 @@ const DocumentationModal: React.FC<DocumentationModalProps> = ({ isOpen, onClose
       />
 
       {/* Content */}
-      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90dvh]">
 
         {/* Header */}
         <div className="bg-slate-50 border-b border-slate-200 p-6 flex justify-between items-start">

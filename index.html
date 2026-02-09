@@ -1,109 +1,144 @@
 <!DOCTYPE html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mobeng Recruitment Portal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              mobeng: {
-                blue: '#0085CA',      // Biru Mobeng (Primary)
-                green: '#78BE20',     // Hijau Mobeng (Primary)
-                darkblue: '#005480',  // Biru Tua
-                darkgreen: '#4A8020', // Hijau Tua
-                yellow: '#FFD100',    // Kuning Tua
-                orange: '#F37021',    // Oranye
-                lightgrey: '#E6E7E8', // Abu-abu Muda
-                darkgrey: '#58595B',  // Abu-abu Tua (Text)
-              }
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mobeng Recruitment Portal</title>
+  <link rel="icon" href="data:,">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mobeng: {
+              blue: '#0085CA',      // Biru Mobeng (Primary)
+              green: '#78BE20',     // Hijau Mobeng (Primary)
+              darkblue: '#005480',  // Biru Tua
+              darkgreen: '#4A8020', // Hijau Tua
+              yellow: '#FFD100',    // Kuning Tua
+              orange: '#F37021',    // Oranye
+              lightgrey: '#E6E7E8', // Abu-abu Muda
+              darkgrey: '#58595B',  // Abu-abu Tua (Text)
             }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
           }
         }
       }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-      }
-      /* Custom scrollbar for chat container */
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-      }
-      .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Custom scrollbar for chat container */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* --- NATIVE-LIKE ANIMATIONS --- */
+
+    /* Smooth Slide In from Right (Like iOS push navigation) */
+    @keyframes slideInRightSoft {
+      0% {
+        opacity: 0;
+        transform: translateX(20px);
       }
 
-      /* --- NATIVE-LIKE ANIMATIONS --- */
-      
-      /* Smooth Slide In from Right (Like iOS push navigation) */
-      @keyframes slideInRightSoft {
-        0% { opacity: 0; transform: translateX(20px); }
-        100% { opacity: 1; transform: translateX(0); }
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Staggered Upward Fade (Like Material Design lists) */
+    @keyframes slideUpFade {
+      0% {
+        opacity: 0;
+        transform: translateY(12px);
       }
 
-      /* Staggered Upward Fade (Like Material Design lists) */
-      @keyframes slideUpFade {
-        0% { opacity: 0; transform: translateY(12px); }
-        100% { opacity: 1; transform: translateY(0); }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Pulse Ring for active states */
+    @keyframes pulseRing {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(0, 133, 202, 0.7);
       }
 
-      /* Pulse Ring for active states */
-      @keyframes pulseRing {
-        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 133, 202, 0.7); }
-        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 133, 202, 0); }
-        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 133, 202, 0); }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(0, 133, 202, 0);
       }
 
-      .animate-slide-in-right {
-        animation: slideInRightSoft 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(0, 133, 202, 0);
+      }
+    }
+
+    .animate-slide-in-right {
+      animation: slideInRightSoft 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    .animate-slide-up-fade {
+      animation: slideUpFade 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    /* Utility to ensure elements stay visible after animation */
+    .fill-mode-forwards {
+      animation-fill-mode: forwards;
+    }
+
+    /* Print Styles for PDF Export */
+    @media print {
+      body * {
+        visibility: hidden;
       }
 
-      .animate-slide-up-fade {
-        animation: slideUpFade 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-      }
-      
-      /* Utility to ensure elements stay visible after animation */
-      .fill-mode-forwards {
-        animation-fill-mode: forwards;
+      #printable-modal,
+      #printable-modal * {
+        visibility: visible;
       }
 
-      /* Print Styles for PDF Export */
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        #printable-modal, #printable-modal * {
-          visibility: visible;
-        }
-        #printable-modal {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          background: white;
-          color: black;
-          padding: 20px;
-          border: none;
-          box-shadow: none;
-        }
-        /* Hide buttons during print */
-        .no-print {
-          display: none !important;
-        }
+      #printable-modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white;
+        color: black;
+        padding: 20px;
+        border: none;
+        box-shadow: none;
       }
-    </style>
+
+      /* Hide buttons during print */
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
 </head>
-  <body class="bg-mobeng-lightgrey/30 text-mobeng-darkgrey antialiased">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+
+<body class="bg-mobeng-lightgrey/30 text-mobeng-darkgrey antialiased">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
 </html>

@@ -1,70 +1,70 @@
 
 
 export enum Sender {
-  USER = 'user',
-  AI = 'ai'
+   USER = 'user',
+   AI = 'ai'
 }
 
 export interface Message {
-  id: string;
-  text: string;
-  sender: Sender;
-  timestamp: Date;
-  isThinking?: boolean;
+   id: string;
+   text: string;
+   sender: Sender;
+   timestamp: Date;
+   isThinking?: boolean;
 }
 
 export interface AssessmentScores {
-  sales: number;
-  leadership: number;
-  operations: number;
-  cx: number;
+   sales: number;
+   leadership: number;
+   operations: number;
+   cx: number;
 }
 
 export interface BigFiveTraits {
-  openness: number;         // Keterbukaan terhadap hal baru
-  conscientiousness: number;// Kehati-hatian / Etos kerja
-  extraversion: number;     // Ekstroversi
-  agreeableness: number;    // Keramahan / Kooperatif
-  neuroticism: number;      // Kestabilan Emosi (Inverse)
+   openness: number;         // Keterbukaan terhadap hal baru
+   conscientiousness: number;// Kehati-hatian / Etos kerja
+   extraversion: number;     // Ekstroversi
+   agreeableness: number;    // Keramahan / Kooperatif
+   neuroticism: number;      // Kestabilan Emosi (Inverse)
 }
 
 export interface AnalysisResult {
-  scores: AssessmentScores;
-  feedback: string;
-  isInterviewOver: boolean;
+   scores: AssessmentScores;
+   feedback: string;
+   isInterviewOver: boolean;
 }
 
 export interface CandidateProfile {
-  name: string;
-  phone: string;
-  education: string; 
-  major: string; 
-  lastPosition: string;
-  lastCompany: string;
-  experienceYears: string;
+   name: string;
+   phone: string;
+   education: string;
+   major: string;
+   lastPosition: string;
+   lastCompany: string;
+   experienceYears: string;
 }
 
 export interface CandidateSubmission {
-  id: string;
-  profile: CandidateProfile;
-  role: string;
-  timestamp: Date;
-  // Test 1 Results
-  simulationScores: AssessmentScores;
-  simulationFeedback: string;
-  // Psychometric Deep Dive
-  psychometrics: BigFiveTraits;
-  cultureFitScore: number; // 0-100
-  starMethodScore: number; // 0-10 (How well they structure answers)
-  // Test 2 Results
-  logicScore: number;
-  // Combined AI Conclusion
-  finalSummary: string;
-  status: 'Recommended' | 'Consider' | 'Reject';
-  // Integrity
-  cheatCount: number; // Tab switches
-  // Transcript
-  chatHistory?: Message[]; // Full conversation log
+   id: string;
+   profile: CandidateProfile;
+   role: string;
+   timestamp: Date;
+   // Test 1 Results
+   simulationScores: AssessmentScores;
+   simulationFeedback: string;
+   // Psychometric Deep Dive
+   psychometrics: BigFiveTraits;
+   cultureFitScore: number; // 0-100
+   starMethodScore: number; // 0-10 (How well they structure answers)
+   // Test 2 Results
+   logicScore: number;
+   // Combined AI Conclusion
+   finalSummary: string;
+   status: 'Recommended' | 'Consider' | 'Reject';
+   // Integrity
+   cheatCount: number; // Tab switches
+   // Transcript
+   chatHistory?: Message[]; // Full conversation log
 }
 
 // --- CONFIGURATION TYPES ---
@@ -72,17 +72,19 @@ export interface CandidateSubmission {
 export type RoleType = 'mechanic' | 'asst_leader' | 'store_leader' | 'area_coord' | 'regional_head';
 
 export interface RoleDefinition {
-  id: RoleType;
-  label: string;
-  description: string;
-  initialScenario: string;
-  systemInstruction: string;
+   id: RoleType;
+   label: string;
+   description: string;
+   initialScenario: string;
+   systemInstruction: string;
 }
 
 export interface AppSettings {
-  activeRole: RoleType;
-  activeLogicSetId: string; // NEW: Controls which question set is served
-  allowCandidateViewScore: boolean; // false = Concentration Mode (Blind), true = Transparent
+   activeRole: RoleType;
+   activeLogicSetId: string; // NEW: Controls which question set is served
+   allowCandidateViewScore: boolean; // false = Concentration Mode (Blind), true = Transparent
+   requireCamera: boolean; // NEW: Toggle Camera Requirement
+   requireMicrophone: boolean; // NEW: Toggle Mic Requirement
 }
 
 // --- SHARED INSTRUCTION PROTOCOL ---
@@ -124,15 +126,15 @@ DO NOT explain the scores in the text. Just output the natural conversation resp
 // --- ROLE DEFINITIONS & SCENARIOS ---
 
 export const ROLE_DEFINITIONS: Record<RoleType, RoleDefinition> = {
-  mechanic: {
-    id: 'mechanic',
-    label: 'Mekanik (Mechanic)',
-    description: 'Fokus pada Diagnosa Teknis, Kejujuran, Kecepatan, dan Kerapihan Kerja.',
-    initialScenario: `Halo, saya AI Asst. Store Leader Anda. Kita akan melakukan tes situasi (SJT) sebanyak 5 soal. Jawablah dengan lisan atau ketik jawaban Anda.
+   mechanic: {
+      id: 'mechanic',
+      label: 'Mekanik (Mechanic)',
+      description: 'Fokus pada Diagnosa Teknis, Kejujuran, Kecepatan, dan Kerapihan Kerja.',
+      initialScenario: `Halo, saya AI Asst. Store Leader Anda. Kita akan melakukan tes situasi (SJT) sebanyak 5 soal. Jawablah dengan lisan atau ketik jawaban Anda.
 
 **Skenario 1 (Integritas & Sales):**
 Anda sedang melakukan servis berkala. Saat membongkar, Anda menemukan *shockbreaker* rembes parah yang TIDAK ada di SPK (Surat Perintah Kerja) awal. Customer sedang menunggu di ruang tunggu dan terlihat sibuk main HP. Apa yang Anda lakukan?`,
-    systemInstruction: `You are a strict AI Asst. Store Leader evaluating a Mechanic candidate at Mobeng. 
+      systemInstruction: `You are a strict AI Asst. Store Leader evaluating a Mechanic candidate at Mobeng. 
     ${CRITICAL_EVALUATION_PROTOCOL}
 
     **INSTRUCTIONS:**
@@ -165,17 +167,17 @@ Anda sedang melakukan servis berkala. Saat membongkar, Anda menemukan *shockbrea
 
     After Scenario 5, set "isInterviewOver": true in the JSON.
     ${JSON_OUTPUT_INSTRUCTION}`
-  },
+   },
 
-  asst_leader: {
-    id: 'asst_leader',
-    label: 'Assistant Store Leader',
-    description: 'Fokus pada Administrasi, Backup Operasional, dan Pengawasan Tim.',
-    initialScenario: `Selamat datang di tes Assistant Store Leader. Kita akan membahas 5 kasus operasional toko Mobeng.
+   asst_leader: {
+      id: 'asst_leader',
+      label: 'Assistant Store Leader',
+      description: 'Fokus pada Administrasi, Backup Operasional, dan Pengawasan Tim.',
+      initialScenario: `Selamat datang di tes Assistant Store Leader. Kita akan membahas 5 kasus operasional toko Mobeng.
 
 **Skenario 1 (Leadership under Pressure):**
 Saat Store Leader sedang cuti, Anda memegang kendali toko. Tiba-tiba di area bengkel terjadi keributan. Mekanik Anda berdebat keras dengan Mekanik Vendor (AC) soal pemakaian tools bersama. Di saat bersamaan, ada pelanggan di meja depan ingin cepat bayar. Mana yang Anda tangani duluan dan bagaimana caranya?`,
-    systemInstruction: `You are a tough AI Store Leader evaluating your potential Assistant.
+      systemInstruction: `You are a tough AI Store Leader evaluating your potential Assistant.
     ${CRITICAL_EVALUATION_PROTOCOL}
 
     **SCENARIO LIST:**
@@ -205,17 +207,17 @@ Saat Store Leader sedang cuti, Anda memegang kendali toko. Tiba-tiba di area ben
 
     After Scenario 5, set "isInterviewOver": true.
     ${JSON_OUTPUT_INSTRUCTION}`
-  },
+   },
 
-  store_leader: {
-    id: 'store_leader',
-    label: 'Store Leader (Kepala Toko)',
-    description: 'Fokus pada Sales Target, People Management, dan Full Operation.',
-    initialScenario: `Selamat datang di seleksi Store Leader. Saya adalah AI Area Coordinator Anda. Saya akan memberikan 5 tantangan manajemen toko.
+   store_leader: {
+      id: 'store_leader',
+      label: 'Store Leader (Kepala Toko)',
+      description: 'Fokus pada Sales Target, People Management, dan Full Operation.',
+      initialScenario: `Selamat datang di seleksi Store Leader. Saya adalah AI Area Coordinator Anda. Saya akan memberikan 5 tantangan manajemen toko.
 
 **Skenario 1 (Sales vs Ops):**
 Omzet toko bulan ini baru mencapai 60% padahal sudah tanggal 25. Di sisi lain, manpower tim berkurang karena 1 mekanik sakit. Anda harus mengejar sales TAPI operasional keteteran. Apa strategi Anda untuk sisa 5 hari ini?`,
-    systemInstruction: `You are a critical Area Coordinator evaluating a Store Leader candidate.
+      systemInstruction: `You are a critical Area Coordinator evaluating a Store Leader candidate.
     ${CRITICAL_EVALUATION_PROTOCOL}
 
     **SCENARIO LIST:**
@@ -245,17 +247,17 @@ Omzet toko bulan ini baru mencapai 60% padahal sudah tanggal 25. Di sisi lain, m
 
     After Scenario 5, set "isInterviewOver": true.
     ${JSON_OUTPUT_INSTRUCTION}`
-  },
+   },
 
-  area_coord: {
-    id: 'area_coord',
-    label: 'Area Coordinator',
-    description: 'Fokus pada Multi-site Management, Audit, dan Strategi Area.',
-    initialScenario: `Anda melamar sebagai Area Coordinator. Saya AI Regional Head akan membedah 5 kasus multi-toko.
+   area_coord: {
+      id: 'area_coord',
+      label: 'Area Coordinator',
+      description: 'Fokus pada Multi-site Management, Audit, dan Strategi Area.',
+      initialScenario: `Anda melamar sebagai Area Coordinator. Saya AI Regional Head akan membedah 5 kasus multi-toko.
 
 **Skenario 1 (Analisa Data):**
 Anda membawahi 5 Toko. Toko A salesnya tertinggi (150%) TAPI komplain pelanggannya juga tertinggi. Toko B salesnya rendah (70%) tapi Zero Complaint dan timnya sangat solid. Jika Anda harus menegur salah satu Store Leader hari ini, siapa yang Anda panggil duluan dan kenapa?`,
-    systemInstruction: `You are a Strategic Regional Head evaluating an Area Coordinator.
+      systemInstruction: `You are a Strategic Regional Head evaluating an Area Coordinator.
     ${CRITICAL_EVALUATION_PROTOCOL}
 
     **SCENARIO LIST:**
@@ -285,17 +287,17 @@ Anda membawahi 5 Toko. Toko A salesnya tertinggi (150%) TAPI komplain pelanggann
 
     After Scenario 5, set "isInterviewOver": true.
     ${JSON_OUTPUT_INSTRUCTION}`
-  },
+   },
 
-  regional_head: {
-    id: 'regional_head',
-    label: 'Regional Head',
-    description: 'Fokus pada P&L, Strategi Bisnis, Ekspansi, dan Crisis Management.',
-    initialScenario: `Selamat datang di level Strategic Assessment Regional Head. Saya AI COO (Chief Operating Officer) Mobeng.
+   regional_head: {
+      id: 'regional_head',
+      label: 'Regional Head',
+      description: 'Fokus pada P&L, Strategi Bisnis, Ekspansi, dan Crisis Management.',
+      initialScenario: `Selamat datang di level Strategic Assessment Regional Head. Saya AI COO (Chief Operating Officer) Mobeng.
 
 **Skenario 1 (Crisis Strategy):**
 Revenue Region Anda turun 15% Year-on-Year (YoY). Kompetitor utama sedang melakukan strategi 'Bakar Uang'. COO dan Kepala Cabang menuntut Anda membuat strategi recovery dalam 3 bulan TANPA ikut perang harga (margin harus dijaga). Apa 3 pilar utama strategi Anda?`,
-    systemInstruction: `You are the COO (Chief Operating Officer) evaluating a Regional Head.
+      systemInstruction: `You are the COO (Chief Operating Officer) evaluating a Regional Head.
     ${CRITICAL_EVALUATION_PROTOCOL}
 
     **SCENARIO LIST:**
@@ -325,5 +327,5 @@ Revenue Region Anda turun 15% Year-on-Year (YoY). Kompetitor utama sedang melaku
 
     After Scenario 5, set "isInterviewOver": true.
     ${JSON_OUTPUT_INSTRUCTION}`
-  }
+   }
 };
