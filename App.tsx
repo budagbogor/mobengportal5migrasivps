@@ -5,7 +5,7 @@ import { Message, Sender, AnalysisResult, CandidateSubmission, CandidateProfile,
 import { sendMessageToGemini, generateFinalSummary } from './services/geminiService';
 import { supabase } from './services/supabaseClient'; // Import Supabase Client
 import { LogicTest, QUESTION_SETS } from './components/LogicTest'; // Keep eager for constants
-import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban, EyeOff, MousePointerClick, Smartphone, Globe, ShieldCheck, Trash2, ChevronDown, ChevronUp, Camera, Mic, Users, Key } from 'lucide-react';
+import { Briefcase, CheckCircle2, ChevronRight, BarChart3, X, Zap, Lock, UserCircle2, ArrowLeft, BookOpen, HelpCircle, CheckCircle, Save, LogOut, Phone, GraduationCap, Building2, Printer, Share2, Settings, Sliders, MonitorPlay, FileText, MessageSquare, ExternalLink, BrainCircuit, ArrowRight, Loader2, Timer, AlertTriangle, Brain, Star, Sparkles, ShieldAlert, Server, UserPlus, Send, Ban, Eye, EyeOff, MousePointerClick, Smartphone, Globe, ShieldCheck, Trash2, ChevronDown, ChevronUp, Camera, Mic, Users, Key } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown for Dashboard
 import remarkGfm from 'remark-gfm';
 
@@ -349,10 +349,12 @@ function App() {
 
     // Called from Integrity Briefing -> STARTS LOGIC TEST (STAGE 1)
     const proceedToLogicTestIntro = () => {
-        if (!deviceReady) {
-            alert("Mohon izinkan akses Kamera dan Mikrofon terlebih dahulu.");
-            return;
-        }
+        // BYPASS: We assume user clicked "Izinkan" and browser will handle it.
+        // We do not block here anymore to resolve "bureaucracy".
+        // if (!deviceReady) { ... } REMOVED
+
+        // Trigger webcam permission request if not yet active by changing view.
+        // The ProctoringCam in the next view/background will handle it.
         setCurrentView('logic_test_intro');
     }
 
@@ -1338,45 +1340,40 @@ function App() {
                 <Suspense fallback={<LoadingScreen />}>
                     <ProctoringCam onViolation={handleProctoringViolation} isActive={true} onDeviceStatus={(status) => setDeviceReady(status)} requireCamera={appSettings.requireCamera} requireMicrophone={appSettings.requireMicrophone} />
                 </Suspense>
-                <div className="max-w-2xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300 my-4">
-                    <div className="bg-gradient-to-r from-red-600 to-red-700 p-6 text-white text-center">
-                        <ShieldAlert size={48} className="mx-auto mb-3 opacity-90" />
-                        <h2 className="text-2xl font-bold uppercase tracking-wide">Pakta Integritas & Cek Perangkat</h2>
-                        <p className="text-red-100 text-sm mt-1">Wajib menyalakan Kamera & Mic untuk melanjutkan.</p>
+                <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300 my-4 text-center">
+                    <div className="bg-slate-900 p-8">
+                        <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                            <Camera size={40} className="text-mobeng-green" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-white mb-2">Cek Kesiapan</h2>
+                        <p className="text-slate-400 text-sm">Sistem akan menyalakan kamera & mikrofon secara otomatis.</p>
                     </div>
+
                     <div className="p-8 space-y-6">
-                        <div className="bg-slate-100 p-4 rounded-xl border border-slate-200">
-                            <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><MonitorPlay size={16} /> Status Perangkat</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className={`p-3 rounded-lg border flex items-center justify-between ${deviceReady ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                    <div className="flex items-center gap-2"><Camera size={18} /><span className="text-xs font-bold">Kamera</span></div>
-                                    {deviceReady ? <CheckCircle2 size={18} /> : <X size={18} />}
-                                </div>
-                                <div className={`p-3 rounded-lg border flex items-center justify-between ${deviceReady ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
-                                    <div className="flex items-center gap-2"><Mic size={18} /><span className="text-xs font-bold">Mikrofon</span></div>
-                                    {deviceReady ? <CheckCircle2 size={18} /> : <X size={18} />}
+                        <div className="flex flex-col gap-3 text-left">
+                            <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
+                                <Ban className="text-red-500 shrink-0" size={20} />
+                                <div>
+                                    <h4 className="font-bold text-slate-800 text-sm">Dilarang Pindah Tab</h4>
+                                    <p className="text-xs text-slate-600">Fokus pada layar. Pindah aplikasi akan dicatat sebagai pelanggaran.</p>
                                 </div>
                             </div>
-                            {!deviceReady && (<div className="mt-3 text-xs text-red-600 bg-red-100 p-2 rounded flex items-center gap-2 animate-pulse"><AlertTriangle size={14} /> Mohon izinkan akses Kamera dan Mikrofon di browser Anda (Popup di pojok atas).</div>)}
-                        </div>
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Ban className="text-red-500" size={20} /> Larangan Keras</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
-                                    <Globe className="text-slate-500" size={24} /><h4 className="font-bold text-slate-800 text-sm">Dilarang Pindah Tab</h4><p className="text-xs text-slate-600">Sistem mencatat jika Anda membuka tab baru. Fokus pada layar ujian.</p>
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col gap-2">
-                                    <EyeOff className="text-slate-500" size={24} /><h4 className="font-bold text-slate-800 text-sm">Wajah Wajib Terlihat</h4><p className="text-xs text-slate-600">Kamera AI akan memantau posisi wajah. Dilarang menoleh berlebihan.</p>
+                            <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                <Eye className="text-blue-500 shrink-0" size={20} />
+                                <div>
+                                    <h4 className="font-bold text-slate-800 text-sm">Wajah Terlihat</h4>
+                                    <p className="text-xs text-slate-600">Pastikan wajah selalu masuk dalam frame kamera pojok kanan atas.</p>
                                 </div>
                             </div>
                         </div>
+
                         <button
                             onClick={proceedToLogicTestIntro}
-                            disabled={!deviceReady}
-                            className={`w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 ${deviceReady ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
+                            className="w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 bg-mobeng-red hover:bg-red-700 text-white animate-bounce-slow"
                         >
-                            <ShieldCheck size={24} /> {deviceReady ? 'Saya Mengerti & Siap Mengerjakan' : 'Menunggu Izin Perangkat...'}
+                            <ShieldCheck size={24} /> Izinkan & Mulai Tes
                         </button>
+                        <p className="text-[10px] text-slate-400">Dengan klik tombol di atas, Anda menyetujui pengawasan AI selama tes berlangsung.</p>
                     </div>
                 </div>
             </div>
