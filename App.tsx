@@ -1348,47 +1348,51 @@ function App() {
     // 3. INTEGRITY BRIEFING
     if (currentView === 'integrity_briefing') {
         return (
-            <div className="min-h-[100dvh] bg-slate-50 flex items-center justify-center p-4 font-sans overflow-y-auto">
-                <Suspense fallback={<LoadingScreen />}>
+            <>
+                {/* Camera Overlay - Rendered outside layout flow */}
+                <Suspense fallback={null}>
                     <ProctoringCam onViolation={handleProctoringViolation} isActive={true} onDeviceStatus={(status) => setDeviceReady(status)} requireCamera={appSettings.requireCamera} requireMicrophone={appSettings.requireMicrophone} />
                 </Suspense>
-                <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300 my-4 text-center">
-                    <div className="bg-slate-900 p-8">
-                        <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                            <Camera size={40} className="text-mobeng-green" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-white mb-2">Cek Kesiapan</h2>
-                        <p className="text-slate-400 text-sm">Sistem akan menyalakan kamera & mikrofon secara otomatis.</p>
-                    </div>
 
-                    <div className="p-8 space-y-6">
-                        <div className="flex flex-col gap-3 text-left">
-                            <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                                <Ban className="text-red-500 shrink-0" size={20} />
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm">Dilarang Pindah Tab</h4>
-                                    <p className="text-xs text-slate-600">Fokus pada layar. Pindah aplikasi akan dicatat sebagai pelanggaran.</p>
-                                </div>
+                <div className="min-h-[100dvh] bg-slate-50 flex items-center justify-center p-4 font-sans overflow-y-auto">
+                    <div className="max-w-xl w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300 my-4 text-center">
+                        <div className="bg-slate-900 p-8">
+                            <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                <Camera size={40} className="text-mobeng-green" />
                             </div>
-                            <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                                <Eye className="text-blue-500 shrink-0" size={20} />
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm">Wajah Terlihat</h4>
-                                    <p className="text-xs text-slate-600">Pastikan wajah selalu masuk dalam frame kamera pojok kanan atas.</p>
-                                </div>
-                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2">Cek Kesiapan</h2>
+                            <p className="text-slate-400 text-sm">Sistem akan menyalakan kamera & mikrofon secara otomatis.</p>
                         </div>
 
-                        <button
-                            onClick={proceedToLogicTestIntro}
-                            className="w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 bg-mobeng-red hover:bg-red-700 text-white animate-bounce-slow"
-                        >
-                            <ShieldCheck size={24} /> Izinkan & Mulai Tes
-                        </button>
-                        <p className="text-[10px] text-slate-400">Dengan klik tombol di atas, Anda menyetujui pengawasan AI selama tes berlangsung.</p>
+                        <div className="p-8 space-y-6">
+                            <div className="flex flex-col gap-3 text-left">
+                                <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
+                                    <Ban className="text-red-500 shrink-0" size={20} />
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm">Dilarang Pindah Tab</h4>
+                                        <p className="text-xs text-slate-600">Fokus pada layar. Pindah aplikasi akan dicatat sebagai pelanggaran.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                    <Eye className="text-blue-500 shrink-0" size={20} />
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm">Wajah Terlihat</h4>
+                                        <p className="text-xs text-slate-600">Pastikan wajah selalu masuk dalam frame kamera pojok kanan atas.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={proceedToLogicTestIntro}
+                                className="w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 bg-mobeng-red hover:bg-red-700 text-white"
+                            >
+                                <ShieldCheck size={24} /> Izinkan & Mulai Tes
+                            </button>
+                            <p className="text-[10px] text-slate-400">Dengan klik tombol di atas, Anda menyetujui pengawasan AI selama tes berlangsung.</p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </>
         );
     }
 
@@ -1428,7 +1432,7 @@ function App() {
     // 4. LOGIC TEST
     if (currentView === 'logic_test') {
         return (
-            <div className="min-h-[100dvh] bg-mobeng-lightgrey flex items-center justify-center p-4 select-none">
+            <div className="min-h-[100dvh] bg-mobeng-lightgrey flex items-center justify-center p-0 md:p-4 select-none">
                 <Suspense fallback={<LoadingScreen />}>
                     <ProctoringCam onViolation={handleProctoringViolation} isActive={true} requireCamera={appSettings.requireCamera} requireMicrophone={appSettings.requireMicrophone} />
                 </Suspense>

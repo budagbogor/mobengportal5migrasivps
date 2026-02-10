@@ -196,9 +196,9 @@ export const LogicTest: React.FC<LogicTestProps> = ({ onComplete, onExit, active
 
   return (
     // ADDED select-none class here
-    <div className="max-w-3xl mx-auto w-full bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[85dvh] md:h-auto border border-slate-200 select-none">
+    <div className="max-w-3xl mx-auto w-full bg-white md:rounded-2xl shadow-xl overflow-hidden flex flex-col h-[100dvh] md:h-auto md:min-h-[600px] border-none md:border border-slate-200 select-none">
       {/* Header */}
-      <div className="bg-mobeng-darkblue text-white p-4 flex justify-between items-center z-10 relative">
+      <div className="bg-mobeng-darkblue text-white p-4 flex justify-between items-center z-10 relative shrink-0">
         <div className="flex items-center gap-3">
           <div className="bg-white/10 p-2 rounded-lg"><BrainCircuit size={20} /></div>
           <div>
@@ -212,12 +212,12 @@ export const LogicTest: React.FC<LogicTestProps> = ({ onComplete, onExit, active
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full bg-slate-100 h-1.5 z-10 relative">
+      <div className="w-full bg-slate-100 h-1.5 z-10 relative shrink-0">
         <div className="bg-mobeng-green h-1.5 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
       </div>
 
       {/* Question Content */}
-      <div className="p-6 md:p-10 flex-1 overflow-y-auto relative bg-slate-50/30">
+      <div className="p-4 md:p-10 flex-1 overflow-y-auto overflow-x-hidden relative bg-slate-50/30">
 
         {/* Animated Container using Key Prop to force remount & animation on index change */}
         <div key={currentIndex} className="animate-slide-in-right">
