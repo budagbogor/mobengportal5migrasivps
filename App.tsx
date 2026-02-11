@@ -1385,7 +1385,7 @@ function App() {
                             <div className="relative z-10 w-full mt-4">
                                 <button
                                     onClick={proceedToLogicTestIntro}
-                                    className="w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 bg-mobeng-red hover:bg-red-700 text-white"
+                                    className="w-full py-4 text-lg font-bold rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white"
                                     style={{ WebkitAppearance: 'none', appearance: 'none', transform: 'translateZ(0)' }}
                                 >
                                     <ShieldCheck size={24} /> Izinkan & Mulai Tes
