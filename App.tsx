@@ -101,6 +101,12 @@ function App() {
         isInterviewOver: false
     });
 
+    // IMPLEMENTATION OF openDocs
+    const openDocs = (role: 'recruiter' | 'candidate') => {
+        setDocRole(role);
+        setIsDocsOpen(true);
+    };
+
     // Storage for Test 1 (Logic) Results before Test 2 (Sim)
     const [tempLogicScore, setTempLogicScore] = useState<number | null>(null);
 
@@ -648,6 +654,12 @@ function App() {
         }
     };
 
+    const copyRegisterLink = () => {
+        const url = `${window.location.origin}/?action=register_admin`;
+        navigator.clipboard.writeText(url);
+        alert("Link Registrasi berhasil disalin! Kirimkan ke calon admin.");
+    };
+
     // --- CHECK REGISTER LINK ---
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -657,10 +669,7 @@ function App() {
         }
     }, []);
 
-    const openDocs = (role: 'candidate' | 'recruiter') => {
-        setDocRole(role);
-        setIsDocsOpen(true);
-    };
+
 
     const sendWhatsApp = (submission: CandidateSubmission) => {
         let phoneNumber = submission.profile.phone.replace(/\D/g, '');
@@ -1791,7 +1800,113 @@ function App() {
         );
     }
 
-    return <div>Loading...</div>;
+    // 8. LINK EXPIRED
+    if (currentView === 'link_expired') {
+        return (
+            <div className="min-h-[100dvh] bg-slate-100 flex items-center justify-center p-4">
+                <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
+                    <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Ban size={40} className="text-red-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Link Tidak Valid / Kadaluarsa</h2>
+                    <p className="text-slate-600 mb-6">Link undangan yang Anda gunakan sudah tidak berlaku atau sudah digunakan sebelumnya.</p>
+                    <button onClick={() => setCurrentView('role_selection')} className="w-full py-3 bg-mobeng-blue text-white font-bold rounded-xl hover:bg-mobeng-darkblue transition-colors">
+                        Kembali ke Halaman Utama
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // 9. USER MANAGEMENT
+    if (currentView === 'user_management') {
+        return (
+            <div className="min-h-[100dvh] bg-slate-100 flex font-sans overflow-hidden">
+                <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden">
+                    <div className="p-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-slate-800">Manajemen Pengguna (Admin)</h2>
+                            <div className="flex gap-2">
+                                <button onClick={() => setCurrentView('recruiter_dashboard')} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-bold border border-slate-300 rounded-lg bg-white">Kembali ke Dashboard</button>
+                                <button onClick={copyRegisterLink} className="bg-mobeng-blue text-white px-4 py-2 rounded-lg font-bold shadow-lg hover:bg-mobeng-darkblue flex items-center gap-2">
+                                    <UserPlus size={16} /> Salin Link Registrasi
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-bold">
+                                    <tr>
+                                        <th className="p-4">Email</th>
+                                        <th className="p-4">Role</th>
+                                        <th className="p-4">Created At</th>
+                                        <th className="p-4 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {users.length === 0 ? (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-400">Tidak ada data user.</td></tr>
+                                    ) : (
+                                        users.map(u => (
+                                            <tr key={u.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                                <td className="p-4 font-medium text-slate-900">{u.email}</td>
+                                                <td className="p-4"><span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold uppercase">{u.role}</span></td>
+                                                <td className="p-4 text-slate-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => handleDeleteUser(u.id, u.email)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // 10. ROLE SELECTION (LANDING PAGE) - DEFAULT VIEW
+    return (
+        <div className="min-h-[100dvh] bg-gradient-to-br from-mobeng-darkblue to-slate-900 flex flex-col items-center justify-center p-4 md:p-8 font-sans">
+            <div className="mb-12 text-center">
+                <h1 className="text-4xl md:text-6xl font-black text-white mb-4 tracking-tighter">
+                    Mobeng <span className="text-transparent bg-clip-text bg-gradient-to-r from-mobeng-green to-emerald-400">Career</span>
+                </h1>
+                <p className="text-blue-100 text-lg md:text-xl font-light max-w-2xl mx-auto">
+                    Platform Assessment & Rekrutmen Digital Berbasis AI
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl w-full">
+                {Object.values(ROLE_DEFINITIONS).map((role) => (
+                    <div key={role.id} onClick={() => {
+                        setAppSettings(prev => ({ ...prev, activeRole: role.id }));
+                        setCurrentView('candidate_intro');
+                    }} className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 cursor-pointer hover:bg-white hover:scale-105 transition-all duration-300 group relative overflow-hidden shadow-2xl">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Briefcase size={60} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white group-hover:text-mobeng-darkblue transition-colors mb-2 flex items-center gap-2">
+                            {role.label} <ChevronRight className="opacity-0 group-hover:opacity-100 transition-opacity text-mobeng-green" size={18} />
+                        </h3>
+                        <p className="text-sm text-blue-200 group-hover:text-slate-600 line-clamp-2 leading-relaxed">{role.description}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="mt-16 text-center">
+                <button onClick={() => setCurrentView('recruiter_login')} className="text-white/30 hover:text-white text-xs font-medium transition-colors flex items-center gap-2 mx-auto px-4 py-2 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10">
+                    <Lock size={12} /> Admin Login
+                </button>
+                <p className="text-white/10 text-[10px] mt-4">&copy; 2024 Mobeng Indonesia. Powered by Antigravity AI.</p>
+            </div>
+        </div>
+    );
 }
 
 export default App;
