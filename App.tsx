@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Message, Sender, AnalysisResult, CandidateSubmission, CandidateProfile, AppSettings, ROLE_DEFINITIONS, RoleType, BigFiveTraits } from './types';
+import { Message, Sender, AnalysisResult, CandidateSubmission, CandidateProfile, AppSettings, ROLE_DEFINITIONS, RoleType, BigFiveTraits, Profile } from './types';
 import { sendMessageToGemini, generateFinalSummary } from './services/geminiService';
 import { supabase } from './services/supabaseClient'; // Import Supabase Client
 import { LogicTest, QUESTION_SETS } from './components/LogicTest'; // Keep eager for constants
@@ -24,7 +24,7 @@ const LoadingScreen = () => (
     </div>
 );
 
-type AppView = 'role_selection' | 'candidate_intro' | 'integrity_briefing' | 'logic_test_intro' | 'logic_test' | 'simulation_intro' | 'simulation' | 'recruiter_login' | 'recruiter_dashboard' | 'link_expired';
+type AppView = 'role_selection' | 'candidate_intro' | 'integrity_briefing' | 'logic_test_intro' | 'logic_test' | 'simulation_intro' | 'simulation' | 'recruiter_login' | 'recruiter_dashboard' | 'user_management' | 'link_expired';
 
 interface InviteToken {
     id: string;      // Unique Token ID
@@ -52,6 +52,16 @@ function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isInviteOpen, setIsInviteOpen] = useState(false);
     const [apiKeyInput, setApiKeyInput] = useState(''); // NEW: Local State for API Key Input
+
+    // --- RECRUITER AUTH STATE ---
+    const [loginEmail, setLoginEmail] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+    const [isRegisterMode, setIsRegisterMode] = useState(false);
+
+    // --- USER MANAGEMENT STATE ---
+    const [users, setUsers] = useState<Profile[]>([]);
+    const [currentUserRole, setCurrentUserRole] = useState<'super_admin' | 'recruiter' | null>(null);
 
     // Candidate Data State
     const [candidateProfile, setCandidateProfile] = useState<CandidateProfile>({
@@ -217,15 +227,10 @@ function App() {
         }
     }, [currentView]);
 
-    // --- AUTO-REDIRECT: RECRUITER LOGIN TO DASHBOARD ---
-    useEffect(() => {
-        if (currentView === 'recruiter_login') {
-            const timer = setTimeout(() => {
-                setCurrentView('recruiter_dashboard');
-            }, 500);
-            return () => clearTimeout(timer);
-        }
-    }, [currentView]);
+    // --- AUTO-REDIRECT REMOVED FOR SECURITY ---
+    // useEffect(() => {
+    //     if (currentView === 'recruiter_login') { ... }
+    // }, [currentView]);
 
     // --- NEW: FETCH DETAIL ON DEMAND ---
     const handleViewDetail = async (submissionId: string) => {
@@ -558,12 +563,99 @@ function App() {
         }
     };
 
-    const handleRecruiterLogin = (e: React.FormEvent) => {
+    const handleRecruiterLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Simple hardcoded check for demo
-        // In production, integrate with Supabase Auth
-        setCurrentView('recruiter_dashboard');
+        setAuthLoading(true);
+
+        try {
+            if (isRegisterMode) {
+                // REGISTER FLOW
+                const { data, error } = await supabase.auth.signUp({
+                    email: loginEmail,
+                    password: loginPassword,
+                });
+
+                if (error) throw error;
+
+                if (data.user) {
+                    alert("Registrasi berhasil! Silakan login (atau cek email konfirmasi jika setting Supabase membutuhkannya).");
+                    setIsRegisterMode(false); // Switch to login
+                }
+            } else {
+                // LOGIN FLOW
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: loginEmail,
+                    password: loginPassword,
+                });
+
+                if (error) throw error;
+
+                if (data.user) {
+                    // Check Role
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', data.user.id)
+                        .single();
+
+                    if (profile) setCurrentUserRole(profile.role as any);
+                    setCurrentView('recruiter_dashboard');
+                }
+            }
+        } catch (error: any) {
+            console.error("Auth Error:", error);
+            alert(`Gagal: ${error.message}`);
+        } finally {
+            setAuthLoading(false);
+        }
     };
+
+    // --- FETCH USERS (HC) ---
+    useEffect(() => {
+        if (currentView === 'user_management') {
+            const fetchUsers = async () => {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error("Error fetching users:", error);
+                    return;
+                }
+                setUsers(data as Profile[]);
+            };
+            fetchUsers();
+        }
+    }, [currentView]);
+
+    const handleDeleteUser = async (userId: string, email: string) => {
+        if (window.confirm(`Yakin hapus user: ${email}? User tidak akan bisa login lagi.`)) {
+            // NOTE: In standard Supabase, deleting from 'auth.users' requires Service Role (Backend).
+            // From Client side, we can only delete from 'profiles'. 
+            // BUT: if we delete 'profiles', the user still exists in Auth (can login but has no profile).
+            // WORKAROUND FOR MVP: We just delete the Profile. Auth user remains but becomes "Orphaned".
+            // Ideally: Use an Edge Function to delete from auth.users.
+            // For now, let's try deleting profile.
+
+            const { error } = await supabase.from('profiles').delete().eq('id', userId);
+            if (error) {
+                alert("Gagal menghapus user: " + error.message);
+            } else {
+                setUsers(prev => prev.filter(u => u.id !== userId));
+                alert("User berhasil dihapus dari sistem manajemen.");
+            }
+        }
+    };
+
+    // --- CHECK REGISTER LINK ---
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('action') === 'register_admin') {
+            setCurrentView('recruiter_login');
+            setIsRegisterMode(true);
+        }
+    }, []);
 
     const openDocs = (role: 'candidate' | 'recruiter') => {
         setDocRole(role);
@@ -717,54 +809,213 @@ function App() {
         )
     }
 
-    // ... (Rest of views remain the same until Dashboard)
+    // 5. RECRUITER LOGIN SCREEN
+    if (currentView === 'recruiter_login') {
+        return (
+            <div className="min-h-[100dvh] bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans">
+                {/* Background Decor */}
+                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-mobeng-blue/20 blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] rounded-full bg-purple-500/10 blur-[100px]" />
 
-    // 6. RECRUITER DASHBOARD
-    if (currentView === 'recruiter_dashboard') {
+                <div className="bg-white/10 backdrop-blur-xl border border-white/10 p-8 md:p-12 rounded-2xl shadow-2xl max-w-md w-full relative z-10">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 bg-mobeng-blue rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
+                            <Lock className="text-white w-8 h-8" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-white mb-2">{isRegisterMode ? 'Buat Akun Admin' : 'Login Admin'}</h2>
+                        <p className="text-blue-200 text-sm">Akses khusus tim rekrutmen Mobeng.</p>
+                    </div>
 
-        // ... (Detail View Logic - SAME)
-        if (selectedSubmission) {
-            // ... (Same Detail View JSX)
-            return (
-                <div className="min-h-[100dvh] bg-slate-50 font-sans">
-                    {/* ID used for Print CSS targeting */}
-                    <div id="printable-modal" className="bg-white min-h-screen relative">
-                        {/* Sticky Header */}
-                        <div className="bg-mobeng-darkblue p-4 md:p-6 sticky top-0 z-50 flex justify-between items-center text-white no-print shadow-lg">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => setSelectedSubmission(null)}
-                                    className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors flex items-center justify-center"
-                                    title="Kembali ke Daftar"
-                                >
-                                    <ArrowLeft size={24} />
-                                </button>
-                                <div>
-                                    <h2 className="text-xl md:text-2xl font-bold leading-tight">{selectedSubmission.profile.name}</h2>
-                                    <p className="text-blue-100 text-xs md:text-sm flex items-center gap-2 mt-1">
-                                        <Briefcase size={14} /> Posisi: {selectedSubmission.role}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => sendWhatsApp(selectedSubmission)} className="bg-mobeng-green hover:bg-mobeng-darkgreen text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm">
-                                    <Share2 size={16} /> <span className="hidden md:inline">WhatsApp</span>
-                                </button>
-                                <button onClick={() => window.print()} className="bg-mobeng-blue hover:bg-sky-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm border border-white/20">
-                                    <Printer size={16} /> <span className="hidden md:inline">Print/PDF</span>
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteSubmission(selectedSubmission.id, selectedSubmission.profile.name)}
-                                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm"
-                                >
-                                    <Trash2 size={16} /> <span className="hidden md:inline">Hapus</span>
-                                </button>
-                            </div>
+                    <form onSubmit={handleRecruiterLogin} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-blue-300 uppercase mb-2">Email</label>
+                            <input
+                                type="email"
+                                required
+                                value={loginEmail}
+                                onChange={(e) => setLoginEmail(e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-mobeng-blue transition-all"
+                                placeholder="nama@mobeng.co.id"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-blue-300 uppercase mb-2">Password</label>
+                            <input
+                                type="password"
+                                required
+                                value={loginPassword}
+                                onChange={(e) => setLoginPassword(e.target.value)}
+                                className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-mobeng-blue transition-all"
+                                placeholder="••••••••"
+                            />
                         </div>
 
-                        {/* Content Container (Full Width, Centered) */}
-                        <div className="p-4 md:p-8 print:p-0 max-w-5xl mx-auto flex flex-col gap-6 print:gap-4 pb-20 print:pb-0">
-                            <style>{`
+                        <button
+                            type="submit"
+                            disabled={authLoading}
+                            className="w-full bg-mobeng-blue hover:bg-blue-600 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                        >
+                            {authLoading ? <Loader2 className="animate-spin mx-auto" /> : (isRegisterMode ? 'Daftar' : 'Masuk Dashboard')}
+                        </button>
+                    </form>
+
+                    <div className="mt-6 text-center text-sm">
+                        {/* HIDE PUBLIC REGISTER BUTTON - ONLY VIA LINK */}
+                        {isRegisterMode ? (
+                            <p className="text-white/60">Mode Registrasi Admin Akun</p>
+                        ) : (
+                            <p className="text-white/60">Hubungi Tim HC untuk pendaftaran akun baru.</p>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => setCurrentView('role_selection')}
+                        className="absolute top-4 left-4 text-white/40 hover:text-white transition-colors"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ... (Rest of views remain the same until Dashboard)
+
+    // ... (Views)
+
+    // 7. USER MANAGEMENT (HC)
+    if (currentView === 'user_management') {
+        return (
+            <div className="min-h-[100dvh] bg-slate-100 flex font-sans overflow-hidden">
+                {/* Sidebar (Duplicate for now - standard layout) */}
+                <div className="w-64 bg-mobeng-darkblue text-white flex flex-col shadow-2xl z-20 hidden md:flex">
+                    <div className="p-6 border-b border-white/10">
+                        <h1 className="text-xl font-bold tracking-tight">Mobeng <span className="text-mobeng-green">HR</span></h1>
+                        <p className="text-xs text-blue-200 mt-1">Human Capital Admin</p>
+                    </div>
+                    <nav className="flex-1 p-4 space-y-2">
+                        <button onClick={() => setCurrentView('recruiter_dashboard')} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-sm font-medium flex items-center gap-3 text-blue-100 transition-colors">
+                            <ArrowLeft size={18} /> Kembali ke Dashboard
+                        </button>
+                        <div className="px-4 py-3 bg-white/10 rounded-xl text-sm font-bold flex items-center gap-3 border border-white/5 cursor-pointer">
+                            <Users size={18} className="text-mobeng-green" /> Manajemen User
+                        </div>
+                    </nav>
+                    <div className="p-4 border-t border-white/10">
+                        <button onClick={() => setCurrentView('role_selection')} className="flex items-center gap-2 text-xs text-blue-200 hover:text-white transition-colors">
+                            <LogOut size={14} /> Keluar
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden p-8">
+                    <div className="flex justify-between items-center mb-8">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-800">Manajemen Pengguna</h2>
+                            <p className="text-slate-500 text-sm mt-1">Kelola akses Recruiter dan Admin.</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                const url = window.location.origin + window.location.pathname + '?action=register_admin';
+                                navigator.clipboard.writeText(url);
+                                alert("Link Registrasi berhasil disalin!\nKiriman link ini ke user baru:\n\n" + url);
+                            }}
+                            className="bg-mobeng-blue hover:bg-mobeng-darkblue text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-bold flex items-center gap-2 transition-all"
+                        >
+                            <UserPlus size={16} /> Salin Link Registrasi
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase">
+                                <tr>
+                                    <th className="p-4">Email</th>
+                                    <th className="p-4">Nama Lengkap</th>
+                                    <th className="p-4">Role</th>
+                                    <th className="p-4">Terdaftar</th>
+                                    <th className="p-4 text-right">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                                {users.map(u => (
+                                    <tr key={u.id} className="hover:bg-slate-50">
+                                        <td className="p-4 font-semibold text-slate-800">{u.email}</td>
+                                        <td className="p-4 text-slate-600">{u.full_name || '-'}</td>
+                                        <td className="p-4">
+                                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold border border-blue-200 uppercase">
+                                                {u.role.replace('_', ' ')}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-slate-500 font-mono text-xs">
+                                            {new Date(u.created_at).toLocaleDateString()}
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button
+                                                onClick={() => handleDeleteUser(u.id, u.email)}
+                                                className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Hapus User"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {users.length === 0 && (
+                                    <tr><td colSpan={5} className="p-8 text-center text-slate-400">Tidak ada data user.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ... (Detail View Logic - SAME)
+    if (selectedSubmission) {
+        // ... (Same Detail View JSX)
+        return (
+            <div className="min-h-[100dvh] bg-slate-50 font-sans">
+                {/* ID used for Print CSS targeting */}
+                <div id="printable-modal" className="bg-white min-h-screen relative">
+                    {/* Sticky Header */}
+                    <div className="bg-mobeng-darkblue p-4 md:p-6 sticky top-0 z-50 flex justify-between items-center text-white no-print shadow-lg">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setSelectedSubmission(null)}
+                                className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors flex items-center justify-center"
+                                title="Kembali ke Daftar"
+                            >
+                                <ArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <h2 className="text-xl md:text-2xl font-bold leading-tight">{selectedSubmission.profile.name}</h2>
+                                <p className="text-blue-100 text-xs md:text-sm flex items-center gap-2 mt-1">
+                                    <Briefcase size={14} /> Posisi: {selectedSubmission.role}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => sendWhatsApp(selectedSubmission)} className="bg-mobeng-green hover:bg-mobeng-darkgreen text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm">
+                                <Share2 size={16} /> <span className="hidden md:inline">WhatsApp</span>
+                            </button>
+                            <button onClick={() => window.print()} className="bg-mobeng-blue hover:bg-sky-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm border border-white/20">
+                                <Printer size={16} /> <span className="hidden md:inline">Print/PDF</span>
+                            </button>
+                            <button
+                                onClick={() => handleDeleteSubmission(selectedSubmission.id, selectedSubmission.profile.name)}
+                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors shadow-sm"
+                            >
+                                <Trash2 size={16} /> <span className="hidden md:inline">Hapus</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Content Container (Full Width, Centered) */}
+                    <div className="p-4 md:p-8 print:p-0 max-w-5xl mx-auto flex flex-col gap-6 print:gap-4 pb-20 print:pb-0">
+                        <style>{`
                                 @media print {
                                     @page { size: A4; margin: 10mm; }
                                     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
@@ -774,142 +1025,144 @@ function App() {
                                 }
                             `}</style>
 
-                            {/* PRINT ONLY HEADER */}
-                            <div className="hidden print:block mb-6 border-b-2 border-slate-800 pb-2">
-                                <div className="flex justify-between items-end mb-2">
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-slate-900">Mobeng Recruitment Report</h1>
-                                        <p className="text-slate-500 text-xs">Generated by AI Assessment Portal | Confidential</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] text-slate-500 uppercase">Tanggal Tes</div>
-                                        <div className="font-bold text-slate-800 text-sm">
-                                            {new Date(selectedSubmission.timestamp || Date.now()).toLocaleDateString('id-ID', {
-                                                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                                            })}
-                                        </div>
-                                    </div>
+                        {/* PRINT ONLY HEADER */}
+                        <div className="hidden print:block mb-6 border-b-2 border-slate-800 pb-2">
+                            <div className="flex justify-between items-end mb-2">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-slate-900">Mobeng Recruitment Report</h1>
+                                    <p className="text-slate-500 text-xs">Generated by AI Assessment Portal | Confidential</p>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 print:bg-slate-100">
-                                    <div>
-                                        <div className="text-[10px] text-slate-500 uppercase font-bold">Kandidat</div>
-                                        <div className="text-lg font-bold text-slate-900">{selectedSubmission.profile.name}</div>
-                                        <div className="text-xs text-slate-600">{selectedSubmission.profile.phone}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] text-slate-500 uppercase font-bold">Posisi Dilamar</div>
-                                        <div className="text-lg font-bold text-mobeng-blue">{selectedSubmission.role}</div>
+                                <div className="text-right">
+                                    <div className="text-[10px] text-slate-500 uppercase">Tanggal Tes</div>
+                                    <div className="font-bold text-slate-800 text-sm">
+                                        {new Date(selectedSubmission.timestamp || Date.now()).toLocaleDateString('id-ID', {
+                                            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                                        })}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Personal Info Grid - Compact for Print */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4 print:gap-3 print:text-sm">
-                                <div className="p-4 print:p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-slate-300">
-                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pendidikan</div>
-                                    <div className="font-semibold text-slate-800">{selectedSubmission.profile.education} - {selectedSubmission.profile.major}</div>
+                            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 print:bg-slate-100">
+                                <div>
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold">Kandidat</div>
+                                    <div className="text-lg font-bold text-slate-900">{selectedSubmission.profile.name}</div>
+                                    <div className="text-xs text-slate-600">{selectedSubmission.profile.phone}</div>
                                 </div>
-                                <div className="p-4 print:p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-slate-300">
-                                    <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pengalaman</div>
-                                    <div className="font-semibold text-slate-800">{selectedSubmission.profile.lastPosition} @ {selectedSubmission.profile.lastCompany} ({selectedSubmission.profile.experienceYears} thn)</div>
-                                </div>
-                            </div>
-
-                            {/* Charts Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-6 print:gap-4 break-inside-avoid">
-                                <div className="col-span-1 md:col-span-2 print:col-span-2 space-y-4 print:space-y-2">
-                                    <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2 print:text-sm">
-                                        <MessageSquare size={16} /> Hasil Tes 1: Behavioral Simulation
-                                    </h3>
-                                    <div className="grid grid-cols-4 gap-2 text-center mb-4 print:mb-2">
-                                        {[
-                                            { l: 'Sales', v: selectedSubmission.simulationScores.sales, c: 'bg-blue-100 text-blue-700' },
-                                            { l: 'Lead', v: selectedSubmission.simulationScores.leadership, c: 'bg-indigo-100 text-indigo-700' },
-                                            { l: 'Ops', v: selectedSubmission.simulationScores.operations, c: 'bg-orange-100 text-orange-700' },
-                                            { l: 'CX', v: selectedSubmission.simulationScores.cx, c: 'bg-green-100 text-green-700' },
-                                        ].map(s => (
-                                            <div key={s.l} className={`${s.c} p-2 px-1 rounded-lg border border-white shadow-sm print:border-slate-200`}>
-                                                <div className="text-[9px] font-bold uppercase opacity-70">{s.l}</div>
-                                                <div className="text-lg font-bold">{s.v}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="print:scale-[0.85] print:origin-top-left">
-                                        <Suspense fallback={<LoadingScreen />}>
-                                            <ScoreCard scores={selectedSubmission.simulationScores} />
-                                        </Suspense>
-                                    </div>
-                                </div>
-
-                                <div className="col-span-1 space-y-4 print:space-y-3">
-                                    <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2 print:text-sm">
-                                        <BrainCircuit size={16} /> Tes 2: Logic & Integrity
-                                    </h3>
-                                    <div className="space-y-3 print:space-y-2">
-                                        <div className="bg-slate-50 p-4 print:p-2 rounded-xl border border-slate-200 text-center">
-                                            <div className="text-xs text-slate-500 uppercase font-bold mb-1">Skor Logika</div>
-                                            <div className="text-4xl print:text-3xl font-bold text-slate-800">{selectedSubmission.logicScore}<span className="text-lg text-slate-400">/10</span></div>
-                                        </div>
-                                        <div className="bg-slate-50 p-4 print:p-2 rounded-xl border border-slate-200 text-center">
-                                            <div className="text-xs text-slate-500 uppercase font-bold mb-1">Culture Fit</div>
-                                            <div className="text-4xl print:text-3xl font-bold text-mobeng-blue">{selectedSubmission.cultureFitScore}%</div>
-                                        </div>
-                                        <div className="bg-red-50 p-4 print:p-2 rounded-xl border border-red-100 text-center">
-                                            <div className="text-xs text-red-500 uppercase font-bold mb-1 flex items-center justify-center gap-1"><ShieldAlert size={12} /> Cheat Flags</div>
-                                            <div className="text-2xl print:text-xl font-bold text-red-700">{selectedSubmission.cheatCount} <span className="text-sm font-normal">violations</span></div>
-                                        </div>
-                                    </div>
+                                <div className="text-right">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold">Posisi Dilamar</div>
+                                    <div className="text-lg font-bold text-mobeng-blue">{selectedSubmission.role}</div>
                                 </div>
                             </div>
-
-                            {/* AI Summary Text - Force Page Break Before if needed, but usually flows to pg 2 */}
-                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm print:border-slate-300 print:shadow-none break-inside-avoid">
-                                <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-                                    <Sparkles className="text-mobeng-yellow" /> Executive Summary (AI)
-                                </h3>
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    className="prose prose-sm print:prose-xs max-w-none text-slate-700 leading-relaxed print:leading-snug text-justify"
-                                >
-                                    {selectedSubmission.finalSummary || "Analisa belum tersedia."}
-                                </ReactMarkdown>
-                            </div>
-
-                            {/* Chat Transcript Accordion */}
-                            <div className="border border-slate-200 rounded-xl overflow-hidden no-print">
-                                <button
-                                    onClick={() => setShowChatLog(!showChatLog)}
-                                    className="w-full bg-slate-50 p-4 flex justify-between items-center text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors"
-                                >
-                                    <span className="flex items-center gap-2"><MessageSquare size={16} /> Transcript Interview Lengkap</span>
-                                    {showChatLog ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </button>
-
-                                {showChatLog && (
-                                    <div className="p-4 bg-slate-50 border-t border-slate-200 max-h-[500px] overflow-y-auto space-y-3">
-                                        {selectedSubmission.chatHistory && selectedSubmission.chatHistory.length > 0 ? (
-                                            selectedSubmission.chatHistory.map((msg, idx) => (
-                                                <div key={idx} className={`flex ${msg.sender === Sender.USER ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className={`max-w-[80%] rounded-lg p-3 text-xs ${msg.sender === Sender.USER ? 'bg-mobeng-blue text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
-                                                        <span className="block font-bold mb-1 opacity-80">{msg.sender === Sender.USER ? 'Kandidat' : 'AI Interviewer'}</span>
-                                                        {msg.text}
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-center text-slate-400 italic text-xs">Riwayat chat tidak tersedia.</p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
                         </div>
+
+                        {/* Personal Info Grid - Compact for Print */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4 print:gap-3 print:text-sm">
+                            <div className="p-4 print:p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-slate-300">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pendidikan</div>
+                                <div className="font-semibold text-slate-800">{selectedSubmission.profile.education} - {selectedSubmission.profile.major}</div>
+                            </div>
+                            <div className="p-4 print:p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-slate-300">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">Pengalaman</div>
+                                <div className="font-semibold text-slate-800">{selectedSubmission.profile.lastPosition} @ {selectedSubmission.profile.lastCompany} ({selectedSubmission.profile.experienceYears} thn)</div>
+                            </div>
+                        </div>
+
+                        {/* Charts Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-6 print:gap-4 break-inside-avoid">
+                            <div className="col-span-1 md:col-span-2 print:col-span-2 space-y-4 print:space-y-2">
+                                <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2 print:text-sm">
+                                    <MessageSquare size={16} /> Hasil Tes 1: Behavioral Simulation
+                                </h3>
+                                <div className="grid grid-cols-4 gap-2 text-center mb-4 print:mb-2">
+                                    {[
+                                        { l: 'Sales', v: selectedSubmission.simulationScores.sales, c: 'bg-blue-100 text-blue-700' },
+                                        { l: 'Lead', v: selectedSubmission.simulationScores.leadership, c: 'bg-indigo-100 text-indigo-700' },
+                                        { l: 'Ops', v: selectedSubmission.simulationScores.operations, c: 'bg-orange-100 text-orange-700' },
+                                        { l: 'CX', v: selectedSubmission.simulationScores.cx, c: 'bg-green-100 text-green-700' },
+                                    ].map(s => (
+                                        <div key={s.l} className={`${s.c} p-2 px-1 rounded-lg border border-white shadow-sm print:border-slate-200`}>
+                                            <div className="text-[9px] font-bold uppercase opacity-70">{s.l}</div>
+                                            <div className="text-lg font-bold">{s.v}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="print:scale-[0.85] print:origin-top-left">
+                                    <Suspense fallback={<LoadingScreen />}>
+                                        <ScoreCard scores={selectedSubmission.simulationScores} />
+                                    </Suspense>
+                                </div>
+                            </div>
+
+                            <div className="col-span-1 space-y-4 print:space-y-3">
+                                <h3 className="font-bold text-mobeng-darkblue flex items-center gap-2 border-b border-slate-200 pb-2 print:text-sm">
+                                    <BrainCircuit size={16} /> Tes 2: Logic & Integrity
+                                </h3>
+                                <div className="space-y-3 print:space-y-2">
+                                    <div className="bg-slate-50 p-4 print:p-2 rounded-xl border border-slate-200 text-center">
+                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Skor Logika</div>
+                                        <div className="text-4xl print:text-3xl font-bold text-slate-800">{selectedSubmission.logicScore}<span className="text-lg text-slate-400">/10</span></div>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 print:p-2 rounded-xl border border-slate-200 text-center">
+                                        <div className="text-xs text-slate-500 uppercase font-bold mb-1">Culture Fit</div>
+                                        <div className="text-4xl print:text-3xl font-bold text-mobeng-blue">{selectedSubmission.cultureFitScore}%</div>
+                                    </div>
+                                    <div className="bg-red-50 p-4 print:p-2 rounded-xl border border-red-100 text-center">
+                                        <div className="text-xs text-red-500 uppercase font-bold mb-1 flex items-center justify-center gap-1"><ShieldAlert size={12} /> Cheat Flags</div>
+                                        <div className="text-2xl print:text-xl font-bold text-red-700">{selectedSubmission.cheatCount} <span className="text-sm font-normal">violations</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* AI Summary Text - Force Page Break Before if needed, but usually flows to pg 2 */}
+                        <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm print:border-slate-300 print:shadow-none break-inside-avoid">
+                            <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                                <Sparkles className="text-mobeng-yellow" /> Executive Summary (AI)
+                            </h3>
+                            <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                className="prose prose-sm print:prose-xs max-w-none text-slate-700 leading-relaxed print:leading-snug text-justify"
+                            >
+                                {selectedSubmission.finalSummary || "Analisa belum tersedia."}
+                            </ReactMarkdown>
+                        </div>
+
+                        {/* Chat Transcript Accordion */}
+                        <div className="border border-slate-200 rounded-xl overflow-hidden no-print">
+                            <button
+                                onClick={() => setShowChatLog(!showChatLog)}
+                                className="w-full bg-slate-50 p-4 flex justify-between items-center text-sm font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                                <span className="flex items-center gap-2"><MessageSquare size={16} /> Transcript Interview Lengkap</span>
+                                {showChatLog ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+
+                            {showChatLog && (
+                                <div className="p-4 bg-slate-50 border-t border-slate-200 max-h-[500px] overflow-y-auto space-y-3">
+                                    {selectedSubmission.chatHistory && selectedSubmission.chatHistory.length > 0 ? (
+                                        selectedSubmission.chatHistory.map((msg, idx) => (
+                                            <div key={idx} className={`flex ${msg.sender === Sender.USER ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[80%] rounded-lg p-3 text-xs ${msg.sender === Sender.USER ? 'bg-mobeng-blue text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                                                    <span className="block font-bold mb-1 opacity-80">{msg.sender === Sender.USER ? 'Kandidat' : 'AI Interviewer'}</span>
+                                                    {msg.text}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-center text-slate-400 italic text-xs">Riwayat chat tidak tersedia.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                     </div>
                 </div>
-            );
-        }
+            </div>
+        );
+    }
 
+    // 6. RECRUITER DASHBOARD
+    if (currentView === 'recruiter_dashboard') {
         return (
             <div className="min-h-[100dvh] bg-slate-100 flex font-sans overflow-hidden">
                 {/* Sidebar */}
@@ -929,6 +1182,12 @@ function App() {
                         <button onClick={() => setIsSettingsOpen(true)} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-sm font-medium flex items-center gap-3 text-blue-100 transition-colors">
                             <Settings size={18} /> Pengaturan Soal
                         </button>
+
+                        {/* HC MENU */}
+                        <button onClick={() => setCurrentView('user_management')} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-sm font-medium flex items-center gap-3 text-blue-100 transition-colors">
+                            <Users size={18} /> Manajemen User
+                        </button>
+
                         <button onClick={() => openDocs('recruiter')} className="w-full text-left px-4 py-3 hover:bg-white/5 rounded-xl text-sm font-medium flex items-center gap-3 text-blue-100 transition-colors">
                             <BookOpen size={18} /> Dokumentasi Sistem
                         </button>

@@ -69,6 +69,14 @@ export interface CandidateSubmission {
 
 // --- CONFIGURATION TYPES ---
 
+export interface Profile {
+   id: string;
+   email: string;
+   full_name: string;
+   role: 'super_admin' | 'recruiter';
+   created_at: string;
+}
+
 export type RoleType = 'mechanic' | 'asst_leader' | 'store_leader' | 'area_coord' | 'regional_head';
 
 export interface RoleDefinition {

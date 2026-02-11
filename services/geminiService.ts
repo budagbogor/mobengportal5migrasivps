@@ -87,55 +87,77 @@ export const generateFinalSummary = async (
     // Create instance dynamically
     const ai = getGenAI();
 
-    // UPDATED PROMPT: STRICT CORRELATION LOGIC + BEHAVIOR
+    // UPDATED PROMPT: GOOGLE RECRUITMENT STANDARD (GCA, RRK, Leadership, Googleyness)
     const prompt = `
-        Role: Expert I/O Psychologist & Senior Recruiter at Mobeng.
-        Task: CRITICALLY analyze candidate performance by correlating COGNITIVE ABILITY (Logic Test) with BEHAVIORAL COMPETENCE (Interview).
+        Role: Senior I/O Psychologist & Elite Recruiter (Google Standard).
+        Task: Conduct a high-level candidate assessment using the "Google Hiring Attributes" framework.
         
         Candidate: ${profile.name} (Position: ${role})
         
-        DATA:
-        1. Logic Test Score: ${logicScore.toFixed(1)}/10 (Cognitive Baseline)
-        2. Behavioral SJT Scores: Sales(${simScores.sales}), Leadership(${simScores.leadership}), Ops(${simScores.operations}), CX(${simScores.cx})
-        3. AI Interview Log: "${simFeedback}"
+        DATA POINTS:
+        1. **General Cognitive Ability (GCA) Baseline**: ${logicScore.toFixed(1)}/10 (Logic Test Score)
+        2. **Behavioral Competencies (SJT)**: Sales(${simScores.sales}), Leadership(${simScores.leadership}), Ops(${simScores.operations}), CX(${simScores.cx})
+        3. **Interview Transcript Analysis**: "${simFeedback}"
         
-        **MANDATORY CORRELATION ANALYSIS (RULES):**
-        - **If Logic < 5.0**: Check if their interview answers were unstructured, confusing, or lacked root-cause analysis. If yes, confirm "Low Cognitive Ability".
-        - **If Logic > 8.0 BUT Interview Scores < 6**: Flag as "Smart but Lazy/Arrogant" or "Poor Communication". High logic should correlate with structured thinking.
-        - **If Logic > 7.0 AND Interview > 8**: Validate as "High Potential / Star Performer".
-        - **If Logic < 5.0 BUT Interview > 8**: Check if they are just "Sweet Talkers" (Good words, low logic). Be skeptical of this pattern.
+        ### ANALYSIS FRAMEWORK (MANDATORY):
+        
+        **1. General Cognitive Ability (GCA) in Automotive Context**
+        - Can they explain complex technical issues (cars/engines) in simple terms?
+        - High Logic + Structured Answer = **Strong GCA (Good for Service Advisor/Leader)**.
+        - High Logic + Unstructured = **Potential Lazy/Arrogant**.
+        - Low Logic + Structured = **Hard Worker (Good for Mechanic/Admin)**.
 
-        **EVALUATION CRITERIA (MOBENG STANDARD):**
-        1. **Substance over Style**: Did they give specific steps or just "sweet talk"?
-        2. **Action Oriented**: Did they take ownership or blame others?
-        
-        OUTPUT REQUIREMENT (JSON):
+        **2. Role-Related Knowledge (RRK) - Workshop & Retail**
+        - **Technical Awareness**: Did they show understanding of bengkel operations (SPK, Spareparts, Service Flow)?
+        - **Sales & Service**: Did they show ability to upsell (e.g., oil, tires) HONESTLY?
+        - **Trust Factor**: Automotive industry relies on TRUST. Did they sound honest or manipulative?
+
+        **3. Leadership & "Mobeng Way"**
+        - **Operational Discipline**: Workshops require strict SOP adherence. Did they respect rules?
+        - **Emergent Leadership**: Taking ownership when the workshop is busy/chaos.
+
+        **4. Googleyness (Culture Fit)**
+        - **Customer Obsession**: Willing to go extra mile for customer safety?
+        - **Integrity**: ZERO TOLERANCE for cheating/lying (Crucial in auto service).
+
+        ---
+
+        ### OUTPUT REQUIREMENT (JSON):
         
         1. **Culture Fit Score** (1-100):
-           - < 60: Too theoretical, robotic, lacks integrity, or LOW LOGIC (<4).
-           - 60-80: Standard answers, safe player.
-           - > 85: Exceptional detail, high logic correlation, concrete steps.
+           - Based on Integrity & Service Orientation.
+           - < 60: Toxic, Dishonest, or "Sok Tahu".
+           - > 85: High Integrity, Customer First, Hardworking.
            
         2. **Psychometrics (Big Five)**:
-           - Derive OCEAN traits from their behavioral choices.
+           - Derive OCEAN traits strictly from behavioral evidence.
            
         3. **Executive Summary Text (Bahasa Indonesia)**:
-           Must follow this EXACT format inside the string (Markdown):
+           Must follow this EXACT Markdown format:
            
-           "**Profil Psikometrik:**
-           [Jelaskan 2 kalimat tentang karakter asli dan stabilitas emosi.]
-           
-           **Analisa Kognitif & Logika:**
-           - [WAJIB bahas Skor Logika (${logicScore.toFixed(1)}). Contoh: 'Skor Logika rendah (4.0) tercermin dari jawaban yang tidak terstruktur', atau 'Kecerdasan logika tinggi (9.0) terlihat dari kemampuan analisa masalah yang tajam', atau 'Anomali: Skor logika tinggi namun jawaban interview tidak mencerminkan kemampuan tersebut'.]
+           "**Executive Summary (Automotive Industry Standard):**
+           [2 sentences summarizing the candidate's profile for a Workshop/Retail environment.]
 
-           **Analisa Kritis (Red Flags):**
-           - [List kelemahan fatal. Contoh: 'Jawaban terlalu normatif', 'Cenderung menghindari konflik', 'Kurang detail teknis'.]
+           **1. Cognitive & Problem Solving (GCA):**
+           - [Analysis of logic vs communication clarity. Mention the Logic Score ${logicScore.toFixed(1)} explicitly.]
            
-           **Prediksi Performa:**
-           [Kategorikan: 'NATO (No Action Talk Only)', 'EXECUTOR' (Pekerja Keras), atau 'STRATEGIST'. Jelaskan alasannya.]
+           **2. Automotive Retail & Technical Fit (RRK):**
+           - [Analysis of sales capability, technical understanding, and operational awareness.]
+
+           **3. Leadership, Integrity & 'The Mobeng Way':**
+           - [Analysis of ownership, honesty (crucial), and discipline.]
            
-           **Rekomendasi Akhir:**
-           [Pilih satu: 'PRIORITAS UTAMA', 'DIPERTIMBANGKAN', atau 'TIDAK DISARANKAN']"
+           **4. Psychometric Insights (OCEAN):**
+           - [Highlight dominant traits (e.g., 'High Conscientiousness important for SOP adherence', 'High Agreeableness good for CS').]
+
+           **5. Red Flags / Areas for Improvement:**
+           - [Critical weaknesses if any.]
+
+           **6. Saran Pengembangan & Training (Development Plan):**
+           - [Concrete steps to improve. Examples: 'Perlu training product knowledge lebih dalam', 'Rotasi ke bagian Front Office untuk melatih komunikasi', 'Mentoring langsung dengan Kepala Bengkel'.]
+           
+           **Final Verdict:**
+           [One of: 'HIRE (Strong)', 'HIRE (Standard)', 'NO HIRE']"
            
         JSON STRUCTURE:
         {
