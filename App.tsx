@@ -174,21 +174,51 @@ function App() {
         validateInvitation();
     }, []);
 
-    // --- LOAD API KEY ---
+    // --- LOAD API KEY (FROM SUPABASE) ---
     useEffect(() => {
-        const storedKey = localStorage.getItem('gemini_api_key');
-        if (storedKey) setApiKeyInput(storedKey);
+        const fetchApiKey = async () => {
+            try {
+                const { data } = await supabase
+                    .from('system_settings')
+                    .select('value')
+                    .eq('key', 'gemini_api_key')
+                    .single();
+
+                if (data && data.value) {
+                    setApiKeyInput(data.value);
+                } else {
+                    // Fallback check local for migration
+                    const local = localStorage.getItem('gemini_api_key');
+                    if (local) setApiKeyInput(local);
+                }
+            } catch (e) {
+                console.warn("Failed to load settings from DB");
+            }
+        };
+        fetchApiKey();
     }, []);
 
-    // --- SAVE API KEY HANDLER ---
-    const handleSaveSettings = () => {
-        if (apiKeyInput.trim()) {
-            localStorage.setItem('gemini_api_key', apiKeyInput.trim());
-        } else {
+    // --- SAVE API KEY HANDLER (TO SUPABASE) ---
+    const handleSaveSettings = async () => {
+        try {
+            const keyToSave = apiKeyInput.trim();
+
+            // 1. Save to Supabase (GLOBAL for all users)
+            const { error } = await supabase
+                .from('system_settings')
+                .upsert({ key: 'gemini_api_key', value: keyToSave });
+
+            if (error) throw error;
+
+            // 2. Clear local storage to avoid confusion
             localStorage.removeItem('gemini_api_key');
+
+            setIsSettingsOpen(false);
+            alert("Pengaturan dan API Key berhasil disimpan ke Database Global.\nSemua user sekarang akan menggunakan Key ini.");
+        } catch (error: any) {
+            console.error("Save error:", error);
+            alert("Gagal menyimpan ke database server: " + error.message);
         }
-        setIsSettingsOpen(false);
-        alert("Pengaturan dan API Key berhasil disimpan.");
     };
 
     // --- OPTIMIZED: FETCH SUBMISSIONS (DASHBOARD) ---
@@ -1364,7 +1394,7 @@ function App() {
                                         className="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-mobeng-blue outline-none bg-white placeholder-slate-400 font-mono"
                                     />
                                     <p className="text-[10px] text-slate-500 mt-2 leading-tight">
-                                        Masukkan API Key Google Gemini pribadi Anda untuk mengaktifkan AI. Jika kosong, sistem akan menggunakan kunci default (jika ada). Kunci tersimpan di browser ini.
+                                        Masukkan API Key Google Gemini pribadi Anda untuk mengaktifkan AI. <strong className='text-mobeng-green'>SETTING GLOBAL</strong>: Key ini akan disimpan di server dan digunakan oleh seluruh user/kandidat.
                                     </p>
                                 </div>
 
@@ -1662,17 +1692,7 @@ function App() {
         );
     }
 
-    // RECRUITER LOGIN (Auto-redirect to Dashboard)
-    if (currentView === 'recruiter_login') {
-        return (
-            <div className="min-h-[100dvh] bg-gradient-to-br from-mobeng-darkblue to-slate-900 flex items-center justify-center p-4">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-white font-medium">Memuat Dashboard Recruiter...</p>
-                </div>
-            </div>
-        );
-    }
+
 
     // 3b. LOGIC TEST INTRO
     if (currentView === 'logic_test_intro') {

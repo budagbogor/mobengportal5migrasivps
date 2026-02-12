@@ -1,16 +1,38 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AnalysisResult, AssessmentScores, CandidateProfile, BigFiveTraits } from "../types";
+import { supabase } from "./supabaseClient";
 
-// Helper to get the AI instance dynamically
-// Priorities: 1. LocalStorage (Admin Setting), 2. Environment Variable
-const getGenAI = () => {
-  const localKey = localStorage.getItem('gemini_api_key');
-  // VITE CHANGE: Use import.meta.env instead of process.env, with safety check
-  const finalKey = localKey || (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) || '';
+// Cache the key in memory to avoid fetching on every single request during a session
+let cachedApiKey: string | null = null;
+
+// Helper to get the AI instance dynamically (Async now)
+const getGenAI = async () => {
+  // 1. Check Memory Cache
+  if (cachedApiKey) {
+    return new GoogleGenAI({ apiKey: cachedApiKey });
+  }
+
+  try {
+    // 2. Check Supabase (Global Settings)
+    const { data, error } = await supabase
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'gemini_api_key')
+      .single();
+
+    if (data && data.value) {
+      cachedApiKey = data.value;
+    }
+  } catch (err) {
+    console.warn("Failed to fetch API key from Supabase", err);
+  }
+
+  // 3. Fallback: Environment Variable
+  const finalKey = cachedApiKey || (import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) || '';
 
   if (!finalKey) {
-    console.warn("API Key is missing. Please configure it in settings or VITE_GEMINI_API_KEY env var.");
+    console.warn("API Key is missing. Please configure it in Admin Settings.");
   }
 
   return new GoogleGenAI({ apiKey: finalKey });
@@ -22,14 +44,14 @@ export const sendMessageToGemini = async (
   systemInstruction: string
 ): Promise<{ text: string; analysis: AnalysisResult | null }> => {
   try {
-    // Create instance dynamically to pick up new keys immediately
-    const ai = getGenAI();
+    // Create instance dynamically
+    const ai = await getGenAI();
 
     const chat = ai.chats.create({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.0-flash", // UPGRADED MODEL for better reasoning
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.3, // Low temperature to reduce hallucinations
+        temperature: 0.3,
       },
       history: history.slice(0, -1).map(msg => ({
         role: msg.sender === Sender.USER ? 'user' : 'model',
@@ -41,9 +63,8 @@ export const sendMessageToGemini = async (
       message: latestUserMessage
     });
 
-    const responseText = result.text || ''; // Handle undefined
+    const responseText = result.text || '';
 
-    // Updated Regex: More robust, allows spaces instead of strict newlines
     const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
     let analysis: AnalysisResult | null = null;
     let cleanText = responseText;
@@ -51,7 +72,6 @@ export const sendMessageToGemini = async (
     if (jsonMatch && jsonMatch[1]) {
       try {
         analysis = JSON.parse(jsonMatch[1]);
-        // Remove the JSON block from the text shown to user
         cleanText = responseText.replace(/```json\s*[\s\S]*?\s*```/, '').trim();
       } catch (e) {
         console.error("Failed to parse analysis JSON", e);
@@ -63,9 +83,13 @@ export const sendMessageToGemini = async (
       analysis: analysis
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw error;
+    // Return a friendly error message to the chat
+    return {
+      text: "Maaf, terjadi gangguan koneksi ke AI (" + (error.message || "Unknown error") + "). Silakan coba kirim pesan lagi.",
+      analysis: null
+    };
   }
 };
 
@@ -84,10 +108,8 @@ export const generateFinalSummary = async (
   logicScore: number
 ): Promise<FinalAnalysisReport> => {
   try {
-    // Create instance dynamically
-    const ai = getGenAI();
+    const ai = await getGenAI();
 
-    // UPDATED PROMPT: GOOGLE RECRUITMENT STANDARD (GCA, RRK, Leadership, Googleyness)
     const prompt = `
         Role: Senior I/O Psychologist & Elite Recruiter (Google Standard).
         Task: Conduct a high-level candidate assessment using the "Google Hiring Attributes" framework.
@@ -175,11 +197,11 @@ export const generateFinalSummary = async (
         `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash', // UPGRADED MODEL
       contents: prompt,
       config: {
         responseMimeType: "application/json",
-        temperature: 0.3, // Explicitly set low temperature to prevent hallucinations
+        temperature: 0.3,
       }
     });
 
@@ -189,7 +211,7 @@ export const generateFinalSummary = async (
       json = JSON.parse(jsonText);
     } catch (e) {
       console.error("Failed to parse final summary JSON", e);
-      throw e; // Trigger catch block below
+      throw e;
     }
 
     return {
@@ -208,7 +230,7 @@ export const generateFinalSummary = async (
   } catch (error) {
     console.error("Error generating final summary:", error);
     return {
-      summary: "Gagal membuat analisa. Data tidak cukup.",
+      summary: "Gagal membuat analisa. Data tidak cukup atau koneksi error.",
       psychometrics: { openness: 50, conscientiousness: 50, extraversion: 50, agreeableness: 50, neuroticism: 50 },
       cultureFitScore: 50,
       starMethodScore: 5
