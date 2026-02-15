@@ -17,3 +17,6 @@ CREATE POLICY "Enable update access for all users" ON system_settings FOR UPDATE
 
 -- Insert default row for Gemini API Key if not exists
 INSERT INTO system_settings (key, value) VALUES ('gemini_api_key', '') ON CONFLICT (key) DO NOTHING;
+INSERT INTO system_settings (key, value) VALUES ('openrouter_api_key', '') ON CONFLICT (key) DO NOTHING;
+INSERT INTO system_settings (key, value) VALUES ('nvidia_api_key', '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') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
