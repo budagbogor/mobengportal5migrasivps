@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import fs from 'fs';
+
 dotenv.config();
 
 const app = express();
@@ -16,8 +18,13 @@ const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from dist
-app.use(express.static(path.join(__dirname, 'dist')));
+// Serve static files (check valid path for both local and deployed)
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+} else {
+    app.use(express.static(__dirname));
+}
 
 // Proxy Endpoint for Chat Completions
 app.post('/api/nvidia/v1/chat/completions', async (req, res) => {
@@ -47,7 +54,12 @@ app.post('/api/nvidia/v1/chat/completions', async (req, res) => {
 
 // All other requests serve index.html (SPA)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    const distPath = path.join(__dirname, 'dist');
+    if (fs.existsSync(distPath)) {
+        res.sendFile(path.join(distPath, 'index.html'));
+    } else {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
 });
 
 app.listen(PORT, () => {

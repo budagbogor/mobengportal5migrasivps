@@ -25,14 +25,29 @@ jobs:
     - name: Build Project
       run: npm run build
 
-    - name: Deploy to VPS
+    - name: Deploy Files to VPS
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USERNAME }}
         password: ${{ secrets.PASSWORD }}
         port: 22
-        source: "dist/*"
+        source: "dist,proxy-server.js,package.json"
         target: "/var/www/html"
-        strip_components: 1 # Removes 'dist/' folder wrapper so content goes directly to html
-        overwrite: true
+        # Removed strip_components to keep folder structure clean or relying on source paths
+        
+    - name: SSH Remote Commands
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        password: ${{ secrets.PASSWORD }}
+        port: 22
+        script: |
+          cd /var/www/html
+          # Install production dependencies for the server (express, cors, etc)
+          npm install --production
+          
+          # Restart or Start PM2
+          pm2 restart mobeng-portal || pm2 start proxy-server.js --name "mobeng-portal"
+          pm2 save
